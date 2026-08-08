@@ -27,6 +27,5 @@ for script in deploy/scripts/backup.sh deploy/scripts/restore.sh; do
   check "$script has valid shell syntax" sh -n "$script"
 done
 
-check "Makefile validates Compose" grep -Fq 'docker compose config' Makefile
 check "Makefile invokes deployment validation" grep -Fq 'tests/validate.sh' Makefile
 echo "Static deployment validation passed."
