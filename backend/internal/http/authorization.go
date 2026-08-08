@@ -26,7 +26,7 @@ func (s *Server) hasPermission(r *http.Request, permission string) (auth.User, b
 
 func bearerToken(r *http.Request) string {
 	h := r.Header.Get("Authorization")
-	if len(h) >= 7 && len(h) >= 7 && (h[:7] == "Bearer " || h[:7] == "bearer ") {
+	if len(h) >= 7 && (h[:7] == "Bearer " || h[:7] == "bearer ") {
 		return h[7:]
 	}
 	return ""
