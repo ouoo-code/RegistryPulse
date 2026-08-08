@@ -37,7 +37,7 @@ test('administrator can add, probe, inspect, and remove a source', async ({ page
   await row.getByRole('button', { name: 'Probe', exact: true }).click()
   await expect(page.getByText('Probe task queued')).toBeVisible()
   await page.getByRole('button', { name: 'Tasks', exact: true }).click()
-  await expect(page.getByText('Probe tasks')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Probe tasks', exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Sources', exact: true }).click()
   await row.getByRole('button', { name: 'Delete', exact: true }).click()
   await expect(row).toHaveCount(0)
