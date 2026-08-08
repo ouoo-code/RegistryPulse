@@ -12,6 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Prepare CI environment
+        run: cp .env.example .env
       - name: Validate deployment files
         run: make validate
       - name: Validate Compose model
@@ -53,6 +55,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Prepare CI environment
+        run: cp .env.example .env
       - name: Build production images
         run: docker compose build
       - name: Validate Compose services

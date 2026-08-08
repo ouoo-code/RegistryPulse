@@ -3,6 +3,8 @@ node_modules/
 .npm-cache/
 .tools/
 frontend/dist/
+tests/e2e/playwright-report/
+tests/e2e/test-results/
 backups/
 *.log
 .DS_Store
