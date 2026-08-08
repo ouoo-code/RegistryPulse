@@ -1,0 +1,13 @@
+.git
+.github
+.codex
+.env
+.env.*
+!.env.example
+backups
+**/node_modules
+**/dist
+**/.npm-cache
+**/.tools
+*.log
+*.tmp

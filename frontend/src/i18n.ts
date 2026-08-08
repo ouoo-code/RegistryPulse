@@ -1,4 +1,5 @@
 import { computed, ref } from 'vue'
+import { APP_VERSION } from './version'
 
 export type Locale = 'zh' | 'en'
 
@@ -71,6 +72,9 @@ const en = {
   occurrences: 'occurrences', faultTimeline: 'Incident timeline', noFaults: 'No incidents recorded', noTrend: 'Not enough samples for a trend', faultStart: 'Started', faultEnd: 'Ended',
   recovered: 'Recovered', startedAt: 'Started', endedAt: 'Ended',
 }
+
+zh.softwareVersion = `v${APP_VERSION}`
+en.softwareVersion = `v${APP_VERSION}`
 
 export function useI18n() {
   const t = computed(() => (locale.value === 'zh' ? zh : en))

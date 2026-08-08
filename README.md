@@ -97,9 +97,14 @@ ENCRYPTION_KEY=请设置随机密钥
 
 ~~~bash
 docker compose config
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 docker compose ps
 ~~~
+
+The application release version is stored in the root `VERSION` file. The
+Compose variable `REGISTRYPULSE_VERSION=latest` selects the Docker Hub image
+channel; it is not the version displayed by the application.
 
 访问：
 

@@ -1,5 +1,12 @@
 name: registrypulse
 
+x-app-image: &app-image "${REGISTRYPULSE_IMAGE:-ouoocode/registrypulse}:${REGISTRYPULSE_VERSION:-latest}"
+x-app-build: &app-build
+  context: .
+  args:
+    BASE_REGISTRY: ${BASE_REGISTRY:-docker.io/library}
+    GOPROXY: ${GOPROXY:-https://proxy.golang.org,direct}
+
 x-logging: &default-logging
   driver: json-file
   options:
@@ -27,12 +34,11 @@ services:
     networks: [backend]
     logging: *default-logging
   api:
-    build:
-      context: ./backend
-      args:
-        BASE_REGISTRY: ${BASE_REGISTRY:-docker.io/library}
-        GOPROXY: ${GOPROXY:-https://proxy.golang.org,direct}
+    image: *app-image
+    build: *app-build
     restart: unless-stopped
+    user: app
+    entrypoint: ["/api"]
     env_file: [.env]
     environment:
       HTTP_PORT: "8080"
@@ -44,12 +50,10 @@ services:
     networks: [backend]
     logging: *default-logging
   worker:
-    build:
-      context: ./backend
-      args:
-        BASE_REGISTRY: ${BASE_REGISTRY:-docker.io/library}
-        GOPROXY: ${GOPROXY:-https://proxy.golang.org,direct}
+    image: *app-image
+    build: *app-build
     restart: unless-stopped
+    user: app
     entrypoint: ["/worker"]
     env_file: [.env]
     depends_on: {api: {condition: service_healthy}}
@@ -57,21 +61,22 @@ services:
     networks: [backend]
     logging: *default-logging
   frontend:
-    build:
-      context: ./frontend
-      args:
-        BASE_REGISTRY: ${BASE_REGISTRY:-docker.io/library}
+    image: *app-image
+    build: *app-build
     restart: unless-stopped
+    environment:
+      REGISTRYPULSE_MODE: frontend
     expose: ["80"]
     healthcheck: {test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1/"], interval: 10s, timeout: 5s, retries: 5}
     networks: [frontend, backend]
     logging: *default-logging
   nginx:
-    image: ${NGINX_IMAGE:-nginx:1.27-alpine}
+    image: *app-image
     restart: unless-stopped
+    environment:
+      REGISTRYPULSE_MODE: edge
     depends_on: {api: {condition: service_healthy}, frontend: {condition: service_started}}
     ports: ["80:80"]
-    volumes: ["./deploy/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro"]
     healthcheck: {test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1/health"], interval: 10s, timeout: 5s, retries: 5}
     networks: [frontend, backend]
     logging: *default-logging
