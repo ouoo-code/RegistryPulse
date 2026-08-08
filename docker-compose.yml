@@ -41,12 +41,12 @@ services:
     entrypoint: ["/api"]
     env_file: [.env]
     environment:
-      HTTP_PORT: "8080"
+      API_HTTP_PORT: "${API_HTTP_PORT:-8080}"
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
     depends_on: {postgres: {condition: service_healthy}, redis: {condition: service_healthy}}
-    expose: ["8080"]
-    healthcheck: {test: ["CMD", "/bin/sh", "-c", "wget -q -O - http://127.0.0.1:8080/health/live"], interval: 10s, timeout: 5s, retries: 5}
+    expose: ["${API_HTTP_PORT:-8080}"]
+    healthcheck: {test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:$${API_HTTP_PORT}/health/live"], interval: 10s, timeout: 5s, retries: 5}
     networks: [backend]
     logging: *default-logging
   worker:
@@ -75,8 +75,9 @@ services:
     restart: unless-stopped
     environment:
       REGISTRYPULSE_MODE: edge
+      API_HTTP_PORT: "${API_HTTP_PORT:-8080}"
     depends_on: {api: {condition: service_healthy}, frontend: {condition: service_started}}
-    ports: ["80:80"]
+    ports: ["${HTTP_PORT:-80}:80"]
     healthcheck: {test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1/health"], interval: 10s, timeout: 5s, retries: 5}
     networks: [frontend, backend]
     logging: *default-logging

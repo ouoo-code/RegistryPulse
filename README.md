@@ -102,9 +102,8 @@ docker compose up -d
 docker compose ps
 ~~~
 
-The application release version is stored in the root `VERSION` file. The
-Compose variable `REGISTRYPULSE_VERSION=latest` selects the Docker Hub image
-channel; it is not the version displayed by the application.
+应用发布版本存储在项目根目录的 `VERSION` 文件中。Compose 变量
+`REGISTRYPULSE_VERSION=latest` 用于选择 Docker Hub 镜像通道；它不是应用界面显示的版本号。
 
 访问：
 

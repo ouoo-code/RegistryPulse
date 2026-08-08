@@ -17,12 +17,12 @@ import (
 )
 
 func main() {
-	port := os.Getenv("HTTP_PORT")
+	port := os.Getenv("API_HTTP_PORT")
 	if port == "" {
 		port = "8080"
 	}
 	if _, err := strconv.Atoi(port); err != nil {
-		slog.Error("invalid HTTP_PORT", "error", err)
+		slog.Error("invalid API_HTTP_PORT", "error", err)
 		os.Exit(1)
 	}
 	store := domain.Store(domain.NewMemoryStore())

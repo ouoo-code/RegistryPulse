@@ -18,7 +18,7 @@ check() {
 check "docker is available" command -v docker
 check "Compose configuration" docker compose config --quiet
 check "nginx configuration exists" test -s deploy/nginx/default.conf
-check "nginx API upstream" grep -Fq 'set $api_upstream api:8080' deploy/nginx/default.conf
+check "nginx API upstream placeholder" grep -Fq 'set $api_upstream api:__API_HTTP_PORT__' deploy/nginx/default.conf
 check "nginx API proxy" grep -Fq 'proxy_pass http://$api_upstream' deploy/nginx/default.conf
 check "forwarded protocol header" grep -Fq 'proxy_set_header X-Forwarded-Proto' deploy/nginx/default.conf
 check "nginx proxy timeout" grep -Fq 'proxy_connect_timeout' deploy/nginx/default.conf
