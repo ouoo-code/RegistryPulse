@@ -1,0 +1,402 @@
+/* Wide dashboard layout: categories are tabs above the directory. */
+.home-page {
+  max-width: 1480px;
+}
+
+.home-hero {
+  padding-left: 18px;
+  padding-right: 18px;
+}
+
+.monitor-layout {
+  display: block;
+}
+
+.category-panel {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.category-panel .panel-heading {
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px 0 4px;
+  border-right: 1px solid #e5ebf2;
+}
+
+.category-panel .panel-kicker,
+.category-panel .category-note {
+  display: none;
+}
+
+.category-panel .panel-heading h2 {
+  margin: 0;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.category-panel .count-badge {
+  min-width: 22px;
+  height: 22px;
+}
+
+.category-link {
+  flex: 0 0 auto;
+  gap: 16px;
+  margin: 0;
+  padding: 9px 13px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #627287;
+  cursor: pointer;
+  font: inherit;
+  white-space: nowrap;
+}
+
+.category-link:hover,
+.category-link.active {
+  border-color: #cfe0fb;
+}
+
+.registry-panel {
+  width: 100%;
+}
+
+.registry-identity {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.registry-identity > a:first-child {
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.latency strong {
+  font-weight: 400;
+}
+
+@media (min-width: 1200px) {
+  .registry-panel {
+    padding: 24px 26px;
+  }
+
+.registry-row {
+    grid-template-columns: 8px minmax(0, 1fr) 150px 110px;
+  }
+
+  .registry-table-head {
+    grid-template-columns: 1fr 150px 110px;
+  }
+}
+
+.registry-table-head .sortable {
+  position: relative;
+  cursor: pointer;
+  user-select: none;
+}
+
+.registry-table-head .sortable:hover,
+.registry-table-head .sortable.active {
+  color: #2468e8;
+}
+
+.registry-table-head .sort-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 14px;
+  margin-left: 3px;
+  color: #a9b5c2;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.registry-table-head .sort-indicator.active {
+  color: #2468e8;
+}
+
+.registry-column-resizer {
+  position: absolute;
+  z-index: 1;
+  top: 2px;
+  right: -1px;
+  width: 8px;
+  height: calc(100% - 4px);
+  border-right: 2px solid transparent;
+  cursor: col-resize;
+}
+
+.registry-column-resizer:hover {
+  border-right-color: #2468e8;
+}
+
+.dark .category-panel .panel-heading {
+  border-color: #293746;
+}
+
+@media (max-width: 680px) {
+  .home-hero {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .category-panel {
+    margin-right: -1px;
+    margin-left: -1px;
+    padding: 8px;
+  }
+
+  .category-panel .panel-heading {
+    padding-right: 10px;
+  }
+
+  .category-link {
+    padding: 8px 10px;
+  }
+}
+
+/* Keep the directory as a real table on desktop: one field per column. */
+@media (min-width: 681px) {
+  .registry-table-head > span:nth-child(2), .registry-row > .registry-category { order: 4; }
+  .registry-table-head > span:nth-child(3), .registry-row > .registry-identity { order: 2; }
+  .registry-table-head > span:nth-child(4), .registry-row > .registry-url { order: 3; }
+  .registry-table-head > span:nth-child(5), .registry-row > .registry-tags { order: 5; }
+  .registry-table-head > span:nth-child(6), .registry-row > .latency { order: 6; }
+  .registry-table-head > span:nth-child(7), .registry-row > .checked-at { order: 7; }
+  .registry-table-head > span:nth-child(8), .registry-row > .row-status { order: 1; }
+
+  .registry-table-head,
+  .registry-row {
+    grid-template-columns: var(--home-columns) !important;
+  }
+
+  .registry-table-head {
+    grid-template-columns: 8px 78px minmax(160px, 1.05fr) minmax(230px, 1.55fr) 125px minmax(120px, .8fr) 150px 170px;
+  }
+
+  .registry-row {
+    grid-template-columns: 8px 110px minmax(160px, 1.05fr) minmax(230px, 1.55fr) 125px minmax(120px, .8fr) 150px 170px;
+  }
+
+  .registry-table-head span:nth-child(2),
+  .registry-table-head span:nth-child(3),
+  .registry-table-head span:nth-child(4),
+  .registry-table-head span:nth-child(5) {
+    text-align: left;
+  }
+
+  .registry-table-head span:nth-child(6),
+  .registry-table-head span:nth-child(7),
+  .registry-table-head span:nth-child(8) {
+    text-align: right;
+  }
+
+  .registry-table-head > span:nth-child(8),
+  .registry-row > .row-status {
+    text-align: left;
+  }
+
+  .registry-row > .row-status {
+    justify-content: flex-start;
+  }
+
+  .registry-url,
+  .registry-tags,
+  .registry-category,
+  .checked-at,
+  .latency,
+  .row-status {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .registry-category {
+    overflow: hidden;
+    color: #718095;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 10px;
+  }
+
+  .registry-identity > a:first-child {
+    display: inline-block;
+  }
+
+  .registry-identity {
+    min-width: 0;
+    white-space: nowrap;
+  }
+
+  .official-badge,
+  .recommended-badge {
+    display: inline-block;
+    width: auto;
+    height: auto;
+    margin-left: 4px;
+    padding: 0;
+    border-radius: 0;
+    background: transparent;
+    color: inherit;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1;
+    white-space: nowrap;
+    vertical-align: super;
+    position: relative;
+    top: -3px;
+  }
+
+  .registry-url {
+    display: block;
+    overflow: hidden;
+    color: #91a0b0;
+    text-decoration: none;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 10px;
+  }
+
+  .checked-at {
+    overflow: hidden;
+    color: #91a0b0;
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 10px;
+  }
+
+  .registry-tags {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 5px;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .registry-tags span {
+    flex: 0 0 auto;
+    max-width: 100%;
+    overflow: hidden;
+    padding: 2px 5px;
+    border-radius: 4px;
+    background: #f0f4f8;
+    color: #8493a4;
+    font-size: 9px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .registry-tags .muted-tag {
+    background: transparent;
+    color: #b0bbc7;
+  }
+
+  .registry-table-head,
+  .registry-row {
+    grid-template-columns: var(--home-columns) !important;
+  }
+}
+
+@media (max-width: 1100px) and (min-width: 681px) {
+  .registry-table-head,
+  .registry-row {
+    grid-template-columns: 8px 78px minmax(130px, 1fr) minmax(170px, 1.3fr) 110px minmax(90px, .7fr) 100px 130px;
+  }
+
+  .registry-table-head,
+  .registry-row {
+    grid-template-columns: var(--home-columns) !important;
+  }
+}
+
+@media (max-width: 680px) {
+  .registry-table-head {
+    display: none;
+  }
+
+  .registry-row {
+    grid-template-columns: 7px minmax(0, 1fr) 72px;
+  }
+
+  .registry-url,
+  .registry-tags {
+    grid-column: 2;
+  }
+
+  .registry-category {
+    display: none;
+  }
+
+  .checked-at {
+    display: none;
+  }
+
+  .registry-url {
+    display: block;
+    overflow: hidden;
+    color: #91a0b0;
+    text-decoration: none;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 9px;
+  }
+
+  .registry-tags {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 5px;
+    margin-top: 5px;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .registry-tags span {
+    flex: 0 0 auto;
+    max-width: 100%;
+    overflow: hidden;
+    padding: 2px 5px;
+    border-radius: 4px;
+    background: #f0f4f8;
+    color: #8493a4;
+    font-size: 8px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .registry-identity > a:first-child {
+    display: inline-block;
+  }
+
+  .registry-identity {
+    min-width: 0;
+    white-space: nowrap;
+  }
+
+  .official-badge,
+  .recommended-badge {
+    font-size: 10px;
+    top: -2px;
+  }
+
+  .registry-identity > a:nth-child(2),
+  .registry-identity .row-tags {
+    display: none;
+  }
+}
+
+.dark .registry-url,
+.dark .checked-at { color: #9aa9b8; }
+.dark .registry-tags span { background: #253340; color: #aab7c5; }
+.dark .registry-tags .muted-tag { background: transparent; color: #7f8d9b; }

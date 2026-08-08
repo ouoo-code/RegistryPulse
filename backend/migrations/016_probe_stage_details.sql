@@ -1,0 +1,23 @@
+-- Persist the observable stages required for meaningful history and diagnosis.
+ALTER TABLE probe_results ADD COLUMN IF NOT EXISTS error_stage text NOT NULL DEFAULT '';
+ALTER TABLE probe_results ADD COLUMN IF NOT EXISTS dns_success boolean NOT NULL DEFAULT false;
+ALTER TABLE probe_results ADD COLUMN IF NOT EXISTS resolved_ips jsonb NOT NULL DEFAULT '[]';
+ALTER TABLE probe_results ADD COLUMN IF NOT EXISTS tcp_success boolean NOT NULL DEFAULT false;
+ALTER TABLE probe_results ADD COLUMN IF NOT EXISTS remote_ip text NOT NULL DEFAULT '';
+ALTER TABLE probe_results ADD COLUMN IF NOT EXISTS remote_port integer NOT NULL DEFAULT 0;
+ALTER TABLE probe_results ADD COLUMN IF NOT EXISTS tls_success boolean NOT NULL DEFAULT false;
+ALTER TABLE probe_results ADD COLUMN IF NOT EXISTS tls_version text NOT NULL DEFAULT '';
+ALTER TABLE probe_results ADD COLUMN IF NOT EXISTS tls_cipher text NOT NULL DEFAULT '';
+ALTER TABLE probe_results ADD COLUMN IF NOT EXISTS certificate_subject text NOT NULL DEFAULT '';
+ALTER TABLE probe_results ADD COLUMN IF NOT EXISTS certificate_issuer text NOT NULL DEFAULT '';
+ALTER TABLE probe_results ADD COLUMN IF NOT EXISTS certificate_days_remaining integer NOT NULL DEFAULT 0;
+ALTER TABLE probe_results ADD COLUMN IF NOT EXISTS registry_api_success boolean NOT NULL DEFAULT false;
+ALTER TABLE probe_results ADD COLUMN IF NOT EXISTS registry_api_status integer NOT NULL DEFAULT 0;
+ALTER TABLE probe_results ADD COLUMN IF NOT EXISTS manifest_success boolean NOT NULL DEFAULT false;
+ALTER TABLE probe_results ADD COLUMN IF NOT EXISTS manifest_status integer NOT NULL DEFAULT 0;
+ALTER TABLE probe_results ADD COLUMN IF NOT EXISTS manifest_content_type text NOT NULL DEFAULT '';
+ALTER TABLE probe_results ADD COLUMN IF NOT EXISTS manifest_digest text NOT NULL DEFAULT '';
+ALTER TABLE probe_results ADD COLUMN IF NOT EXISTS blob_success boolean NOT NULL DEFAULT false;
+ALTER TABLE probe_results ADD COLUMN IF NOT EXISTS blob_status integer NOT NULL DEFAULT 0;
+ALTER TABLE probe_results ADD COLUMN IF NOT EXISTS blob_ttfb_ms bigint NOT NULL DEFAULT 0;
+ALTER TABLE probe_results ADD COLUMN IF NOT EXISTS blob_speed_bps bigint NOT NULL DEFAULT 0;

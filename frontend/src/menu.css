@@ -1,0 +1,8 @@
+.menu-toggle{display:none}
+@media (max-width:760px){
+  .menu-toggle{display:block}
+  header nav{display:none;position:absolute;top:68px;left:16px;right:16px;background:#fff;border:1px solid #e7edf3;border-radius:10px;padding:12px;box-shadow:0 8px 24px #1d314218}
+  header nav.menu-open{display:grid;gap:10px}
+  header nav a{display:block;padding:6px}
+  .dark header nav{background:#18232e;border-color:#293746}
+}
