@@ -294,8 +294,7 @@ RegistryPulse/
 作者：
 
 ~~~text
-ouoo-code
-镜像脉动 · Registry Pulse v1.0.2
+ouoo-code  镜像脉动 · Registry Pulse
 ~~~
 
 ## 项目地址
