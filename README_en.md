@@ -108,7 +108,7 @@ docker compose up -d
 docker compose ps
 ~~~
 
-This release is designed as a fresh installation. On the first API start, the application creates the complete database schema and inserts the default categories, test images, system settings, and built-in source catalog. It does not include legacy database migrations, backfills, upgrade, or rollback steps. Restarts skip the completed initialization; keep the PostgreSQL volume and use `make backup` after the service starts.
+This release is designed as a fresh installation. On the first API start, the application creates the complete database schema and inserts the default categories, test images, system settings, and built-in source catalog. It does not include legacy migrations, backfills, upgrade, or rollback steps. Restarts skip the completed initialization; keep the PostgreSQL volume and use `make backup` after the service starts. If you intentionally want a blank installation, stop the stack and explicitly remove only this project’s PostgreSQL/Redis volumes; that permanently deletes data.
 
 The application release version is stored in the root `VERSION` file. The Compose variable `REGISTRYPULSE_VERSION=latest` selects the Docker Hub image channel; it is not the version displayed by the application.
 

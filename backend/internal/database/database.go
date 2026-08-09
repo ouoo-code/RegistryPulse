@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -45,21 +44,25 @@ func Ping(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
-// Initialize applies the initial SQL files in lexical order. Each file is one
-// transaction; schema_migrations is only a restart marker for the current
-// installation baseline, not an upgrade path for historical schemas.
+// Initialize applies the fixed SQL files that make up the current fresh-install
+// baseline. These are not incremental migrations: a new deployment starts
+// with an empty database, and the marker only prevents API and Worker from
+// repeating initialization after a restart.
 func Initialize(ctx context.Context, db *sql.DB, dir string) error {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return fmt.Errorf("read database initialization files: %w", err)
-	}
-	files := make([]string, 0, len(entries))
-	for _, entry := range entries {
-		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".sql") {
-			files = append(files, entry.Name())
+	files := []string{"001_initial.sql", "004_seed_defaults.sql", "018_seed_anye_status_sources.sql"}
+	for _, name := range files {
+		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
+			return fmt.Errorf("read database initialization file %s: %w", name, err)
 		}
 	}
-	sort.Strings(files)
+	// API and Worker both initialize the database during startup. The advisory
+	// lock makes the first-install sequence single-writer without requiring a
+	// separate migration container or an upgrade framework.
+	if _, err := db.ExecContext(ctx, `SELECT pg_advisory_lock(813742091)`); err != nil {
+		return fmt.Errorf("lock database initialization: %w", err)
+	}
+	defer func() { _, _ = db.ExecContext(context.Background(), `SELECT pg_advisory_unlock(813742091)`) }()
+	var err error
 	if _, err = db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`); err != nil {
 		return fmt.Errorf("create initialization marker: %w", err)
 	}
