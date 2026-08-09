@@ -21,42 +21,90 @@ type Category struct {
 	CreatedAt             time.Time `json:"created_at"`
 }
 
+type TestImage struct {
+	ID           string    `json:"id"`
+	Reference    string    `json:"reference"`
+	Enabled      bool      `json:"enabled"`
+	MaxBytes     int64     `json:"max_bytes"`
+	IsDefault    bool      `json:"is_default"`
+	AuthStrategy string    `json:"auth_strategy"`
+	CategoryIDs  []string  `json:"category_ids,omitempty"`
+	ProbeModes   []string  `json:"probe_modes,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+type CredentialProfile struct {
+	ID           string    `json:"id"`
+	Name         string    `json:"name"`
+	AuthType     string    `json:"auth_type"`
+	Username     string    `json:"username,omitempty"`
+	SourceID     string    `json:"source_id,omitempty"`
+	RegistryHost string    `json:"registry_host,omitempty"`
+	CategoryID   string    `json:"category_id,omitempty"`
+	Enabled      bool      `json:"enabled"`
+	HasSecret    bool      `json:"has_secret"`
+	SecretMasked string    `json:"secret_masked,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+type CredentialProfileInput struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	AuthType     string `json:"auth_type"`
+	Username     string `json:"username"`
+	Secret       string `json:"secret"`
+	ClearSecret  bool   `json:"clear_secret"`
+	SourceID     string `json:"source_id"`
+	RegistryHost string `json:"registry_host"`
+	CategoryID   string `json:"category_id"`
+	Enabled      *bool  `json:"enabled"`
+}
+
+type ResolvedCredential struct {
+	AuthType string
+	Username string
+	Secret   string
+}
+
 type Source struct {
-	ID                 string    `json:"id"`
-	CategoryID         string    `json:"category_id"`
-	Name               string    `json:"name"`
-	BaseURL            string    `json:"base_url"`
-	DisplayURL         string    `json:"display_url"`
-	RegistryHost       string    `json:"registry_host"`
-	Description        string    `json:"description"`
-	Provider           string    `json:"provider"`
-	Country            string    `json:"country"`
-	Region             string    `json:"region"`
-	Operator           string    `json:"operator"`
-	Tags               []string  `json:"tags"`
-	IsOfficial         bool      `json:"is_official"`
-	IsCloudflare       bool      `json:"is_cloudflare"`
-	IsRecommended      bool      `json:"is_recommended"`
-	Enabled            bool      `json:"enabled"`
-	Priority           int       `json:"priority"`
-	SortOrder          int       `json:"sort_order"`
-	Maintenance        bool      `json:"maintenance"`
-	ProbeConfigCustom  bool      `json:"probe_config_custom"`
-	ProbeMode          string    `json:"probe_mode"`
-	TestRepository     string    `json:"test_repository"`
-	TestTag            string    `json:"test_tag"`
-	TestDigest         string    `json:"test_digest"`
-	RequestTimeout     int       `json:"request_timeout_seconds"`
-	DownloadTestBytes  int64     `json:"download_test_bytes"`
-	TestImageID        string    `json:"test_image_id,omitempty"`
-	TestImageReference string    `json:"test_image_reference,omitempty"`
-	TestImageMaxBytes  int64     `json:"test_image_max_bytes,omitempty"`
-	Status             string    `json:"status"`
-	ResponseMS         int64     `json:"response_ms"`
-	LastChecked        time.Time `json:"last_checked"`
-	Error              string    `json:"error,omitempty"`
-	CreatedAt          time.Time `json:"created_at"`
-	UpdatedAt          time.Time `json:"updated_at"`
+	ID                    string    `json:"id"`
+	CategoryID            string    `json:"category_id"`
+	Name                  string    `json:"name"`
+	BaseURL               string    `json:"base_url"`
+	DisplayURL            string    `json:"display_url"`
+	RegistryHost          string    `json:"registry_host"`
+	Description           string    `json:"description"`
+	Provider              string    `json:"provider"`
+	Country               string    `json:"country"`
+	Region                string    `json:"region"`
+	Operator              string    `json:"operator"`
+	Tags                  []string  `json:"tags"`
+	IsOfficial            bool      `json:"is_official"`
+	IsCloudflare          bool      `json:"is_cloudflare"`
+	IsRecommended         bool      `json:"is_recommended"`
+	Enabled               bool      `json:"enabled"`
+	Priority              int       `json:"priority"`
+	SortOrder             int       `json:"sort_order"`
+	Maintenance           bool      `json:"maintenance"`
+	ProbeConfigCustom     bool      `json:"probe_config_custom"`
+	ProbeMode             string    `json:"probe_mode"`
+	TestRepository        string    `json:"test_repository"`
+	TestTag               string    `json:"test_tag"`
+	TestDigest            string    `json:"test_digest"`
+	RequestTimeout        int       `json:"request_timeout_seconds"`
+	DownloadTestBytes     int64     `json:"download_test_bytes"`
+	TestImageID           string    `json:"test_image_id,omitempty"`
+	TestImageReference    string    `json:"test_image_reference,omitempty"`
+	TestImageMaxBytes     int64     `json:"test_image_max_bytes,omitempty"`
+	TestImageAuthStrategy string    `json:"test_image_auth_strategy,omitempty"`
+	Status                string    `json:"status"`
+	ResponseMS            int64     `json:"response_ms"`
+	LastChecked           time.Time `json:"last_checked"`
+	Error                 string    `json:"error,omitempty"`
+	CreatedAt             time.Time `json:"created_at"`
+	UpdatedAt             time.Time `json:"updated_at"`
 }
 
 type ProbeResult struct {

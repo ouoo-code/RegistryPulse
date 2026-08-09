@@ -1,4 +1,4 @@
-import { api, type AdminRole, type AdminSettings, type AdminTask, type AdminUser, type Category, type CategoryInput, type History, type NotificationChannel, type NotificationRule, type ProbeNode, type ProbeTestInput, type ProbeTestResult, type Source, type TestImage, type TotpSettings } from './api'
+import { api, type AdminRole, type AdminSettings, type AdminTask, type AdminUser, type Category, type CategoryInput, type CredentialProfile, type CredentialProfileInput, type History, type NotificationChannel, type NotificationRule, type ProbeNode, type ProbeTestInput, type ProbeTestResult, type Source, type TestImage, type TestImageQuery, type TotpSettings } from './api'
 
 export function adminHeaders(token: string): HeadersInit {
   return { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }
@@ -20,7 +20,14 @@ export const adminApi = {
   roles: (token: string) => adminRequest<AdminRole[]>(token, '/admin/roles'),
   notifications: (token: string) => adminRequest<NotificationChannel[]>(token, '/admin/notifications'),
   notificationRules: (token: string) => adminRequest<NotificationRule[]>(token, '/admin/notification-rules'),
-  testImages: (token: string) => adminRequest<TestImage[]>(token, '/admin/test-images'),
+  credentialProfiles: (token: string) => adminRequest<CredentialProfile[]>(token, '/admin/credential-profiles'),
+  testImages: (token: string, query: TestImageQuery = {}) => {
+    const params = new URLSearchParams()
+    if (query.category_id) params.set('category_id', query.category_id)
+    if (query.probe_mode) params.set('probe_mode', query.probe_mode)
+    const suffix = params.toString()
+    return adminRequest<TestImage[]>(token, `/admin/test-images${suffix ? `?${suffix}` : ''}`)
+  },
   settings: (token: string) => adminRequest<AdminSettings>(token, '/admin/settings'),
   totp: (token: string) => adminRequest<TotpSettings>(token, '/admin/totp'),
   createCategory: (token: string, input: CategoryInput) => adminRequest<Category>(token, '/admin/categories', { method: 'POST', body: JSON.stringify(input) }),
@@ -32,6 +39,9 @@ export const adminApi = {
   createNotificationRule: (token: string, input: Omit<NotificationRule, 'id'>) => adminRequest<NotificationRule>(token, '/admin/notification-rules', { method: 'POST', body: JSON.stringify(input) }),
   updateNotificationRule: (token: string, id: string, input: Omit<NotificationRule, 'id'>) => adminRequest<NotificationRule>(token, `/admin/notification-rules/${id}`, { method: 'PUT', body: JSON.stringify({ ...input, id }) }),
   deleteNotificationRule: (token: string, id: string) => adminRequest<void>(token, `/admin/notification-rules/${id}`, { method: 'DELETE' }),
+  createCredentialProfile: (token: string, input: CredentialProfileInput) => adminRequest<CredentialProfile>(token, '/admin/credential-profiles', { method: 'POST', body: JSON.stringify(input) }),
+  updateCredentialProfile: (token: string, id: string, input: CredentialProfileInput) => adminRequest<CredentialProfile>(token, `/admin/credential-profiles/${id}`, { method: 'PUT', body: JSON.stringify({ ...input, id }) }),
+  deleteCredentialProfile: (token: string, id: string) => adminRequest<void>(token, `/admin/credential-profiles/${id}`, { method: 'DELETE' }),
 }
 
 export async function exportSources(token: string, format: 'json' | 'csv') {

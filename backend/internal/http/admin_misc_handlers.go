@@ -6,12 +6,14 @@ import (
 	"database/sql"
 	"encoding/base32"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
 	"github.com/ouoo-code/RegistryPulse/internal/auth"
+	"github.com/ouoo-code/RegistryPulse/internal/database"
 	"github.com/ouoo-code/RegistryPulse/internal/domain"
 	"github.com/ouoo-code/RegistryPulse/internal/notification"
 )
@@ -36,7 +38,9 @@ func (s *Server) adminTOTP(w http.ResponseWriter, r *http.Request) {
 			writeError(w, 404, "USER_NOT_FOUND", "user not found")
 			return
 		}
-		writeData(w, map[string]any{"enabled": enabled, "secret": secret}, nil)
+		// A TOTP secret is equivalent to a password. It is only returned once
+		// by the generate action and must never be exposed by a status query.
+		writeData(w, map[string]any{"enabled": enabled, "configured": secret != ""}, nil)
 		return
 	}
 	var input struct {
@@ -124,6 +128,10 @@ func (s *Server) adminCategories(w http.ResponseWriter, r *http.Request) {
 			writeError(w, 400, "INVALID_CATEGORY", "id, slug and name are required")
 			return
 		}
+		if err := validateCategoryDefaultTestImage(r.Context(), db, in.ID, in.DefaultTestImageID, in.DefaultProbeMode); err != nil {
+			writeError(w, 400, "INVALID_TEST_IMAGE_SCOPE", err.Error())
+			return
+		}
 		_, err := db.ExecContext(r.Context(), `INSERT INTO registry_categories(id,slug,name,description,icon,official_url,default_test_repository,default_test_tag,default_test_image_id,default_probe_mode,default_timeout_seconds,default_manifest_path,auth_type,enabled,sort_order) VALUES($1,$2,$3,$4,$5,$6,$7,$8,NULLIF($9,'')::uuid,$10,$11,$12,$13,$14,$15)`, in.ID, in.Slug, in.Name, in.Description, in.Icon, in.OfficialURL, in.DefaultTestRepository, in.DefaultTestTag, in.DefaultTestImageID, in.DefaultProbeMode, in.DefaultTimeoutSeconds, in.DefaultManifestPath, in.AuthType, in.Enabled, in.SortOrder)
 		if err != nil {
 			writeError(w, 500, "CATEGORY_CREATE_FAILED", "could not create category")
@@ -163,6 +171,10 @@ func (s *Server) adminCategories(w http.ResponseWriter, r *http.Request) {
 			writeError(w, 400, "INVALID_JSON", "invalid request body")
 			return
 		}
+		if err := validateCategoryDefaultTestImage(r.Context(), db, id, in.DefaultTestImageID, in.DefaultProbeMode); err != nil {
+			writeError(w, 400, "INVALID_TEST_IMAGE_SCOPE", err.Error())
+			return
+		}
 		res, err := db.ExecContext(r.Context(), `UPDATE registry_categories SET slug=$1,name=$2,description=$3,icon=$4,official_url=$5,default_test_repository=$6,default_test_tag=$7,default_test_image_id=NULLIF($8,'')::uuid,default_probe_mode=$9,default_timeout_seconds=$10,default_manifest_path=$11,auth_type=$12,enabled=$13,sort_order=$14 WHERE id=$15`, in.Slug, in.Name, in.Description, in.Icon, in.OfficialURL, in.DefaultTestRepository, in.DefaultTestTag, in.DefaultTestImageID, in.DefaultProbeMode, in.DefaultTimeoutSeconds, in.DefaultManifestPath, in.AuthType, in.Enabled, in.SortOrder, id)
 		if err != nil {
 			writeError(w, 500, "CATEGORY_UPDATE_FAILED", "could not update category")
@@ -178,6 +190,29 @@ func (s *Server) adminCategories(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeError(w, 405, "METHOD_NOT_ALLOWED", "method not allowed")
+}
+
+func validateCategoryDefaultTestImage(ctx context.Context, db *sql.DB, categoryID, imageID, mode string) error {
+	if strings.TrimSpace(imageID) == "" {
+		return nil
+	}
+	mode = strings.TrimSpace(mode)
+	if mode == "" {
+		mode = "registry"
+	}
+	if !supportedProbeMode(mode) {
+		return errors.New("unsupported default_probe_mode")
+	}
+	if err := database.TestImageApplicable(ctx, db, imageID, categoryID, mode); err != nil {
+		if errors.Is(err, database.ErrTestImageNotApplicable) {
+			return errors.New("default_test_image_id is not applicable to category_id and default_probe_mode")
+		}
+		if errors.Is(err, domain.ErrNotFound) {
+			return errors.New("default_test_image_id was not found")
+		}
+		return err
+	}
+	return nil
 }
 
 func (s *Server) adminSettings(w http.ResponseWriter, r *http.Request) {

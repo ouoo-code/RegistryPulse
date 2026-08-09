@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"strings"
@@ -142,6 +143,9 @@ func (s *Store) UpsertSource(in domain.SourceInput, id string) (domain.Source, e
 	var testImageID any
 	if in.TestImageID != nil && strings.TrimSpace(*in.TestImageID) != "" {
 		testImageID = strings.TrimSpace(*in.TestImageID)
+		if err := ValidateSourceTestImage(context.Background(), s.DB, testImageID.(string), in.CategoryID, in.ProbeMode); err != nil {
+			return domain.Source{}, err
+		}
 	}
 	displayURL := in.DisplayURL
 	if displayURL == "" {
@@ -219,7 +223,7 @@ func (s *Store) DeleteSource(id string) error {
 	return tx.Commit()
 }
 
-const sourceSelect = `SELECT rs.id::text,rs.category_id,rs.name,rs.base_url,COALESCE(rs.display_url,rs.base_url),rs.registry_host,rs.description,rs.provider,rs.country,rs.region,rs.operator,rs.tags,rs.is_official,rs.is_cloudflare,rs.is_recommended,rs.is_enabled,rs.priority,rs.sort_order,rs.maintenance,rs.probe_config_custom,CASE WHEN rs.probe_config_custom THEN rs.probe_mode ELSE COALESCE(NULLIF(c.default_probe_mode,''),'registry') END,CASE WHEN rs.probe_config_custom THEN rs.test_repository ELSE COALESCE(NULLIF(c.default_test_repository,''),'library/alpine') END,CASE WHEN rs.probe_config_custom THEN rs.test_tag ELSE COALESCE(NULLIF(c.default_test_tag,''),'latest') END,rs.test_digest,CASE WHEN rs.probe_config_custom THEN rs.request_timeout_seconds ELSE COALESCE(NULLIF(c.default_timeout_seconds,0),15) END,rs.download_test_bytes,rs.status,rs.response_ms,rs.last_checked,rs.error,rs.created_at,rs.updated_at,COALESCE(test_image.image_id::text,''),COALESCE(test_image.reference,''),COALESCE(test_image.max_bytes,0) FROM registry_sources rs JOIN registry_categories c ON c.id=rs.category_id LEFT JOIN LATERAL (SELECT id AS image_id,reference,max_bytes,0 AS selection_priority FROM test_images WHERE rs.probe_config_custom AND id=rs.test_image_id AND enabled UNION ALL SELECT id AS image_id,reference,max_bytes,1 AS selection_priority FROM test_images WHERE NOT rs.probe_config_custom AND id=c.default_test_image_id AND enabled UNION ALL SELECT id AS image_id,reference,max_bytes,2 AS selection_priority FROM test_images WHERE is_default AND enabled ORDER BY selection_priority,image_id LIMIT 1) AS test_image ON true`
+const sourceSelect = `SELECT rs.id::text,rs.category_id,rs.name,rs.base_url,COALESCE(rs.display_url,rs.base_url),rs.registry_host,rs.description,rs.provider,rs.country,rs.region,rs.operator,rs.tags,rs.is_official,rs.is_cloudflare,rs.is_recommended,rs.is_enabled,rs.priority,rs.sort_order,rs.maintenance,rs.probe_config_custom,CASE WHEN rs.probe_config_custom THEN rs.probe_mode ELSE COALESCE(NULLIF(c.default_probe_mode,''),'registry') END,CASE WHEN rs.probe_config_custom THEN rs.test_repository ELSE COALESCE(NULLIF(c.default_test_repository,''),'library/alpine') END,CASE WHEN rs.probe_config_custom THEN rs.test_tag ELSE COALESCE(NULLIF(c.default_test_tag,''),'latest') END,rs.test_digest,CASE WHEN rs.probe_config_custom THEN rs.request_timeout_seconds ELSE COALESCE(NULLIF(c.default_timeout_seconds,0),15) END,rs.download_test_bytes,rs.status,rs.response_ms,rs.last_checked,rs.error,rs.created_at,rs.updated_at,COALESCE(test_image.image_id::text,''),COALESCE(test_image.reference,''),COALESCE(test_image.max_bytes,0),COALESCE(test_image.auth_strategy,'anonymous') FROM registry_sources rs JOIN registry_categories c ON c.id=rs.category_id LEFT JOIN LATERAL (SELECT id AS image_id,reference,max_bytes,auth_strategy,0 AS selection_priority FROM test_images WHERE rs.probe_config_custom AND id=rs.test_image_id AND enabled UNION ALL SELECT id AS image_id,reference,max_bytes,auth_strategy,1 AS selection_priority FROM test_images WHERE NOT rs.probe_config_custom AND id=c.default_test_image_id AND enabled UNION ALL SELECT id AS image_id,reference,max_bytes,auth_strategy,2 AS selection_priority FROM test_images WHERE is_default AND enabled ORDER BY selection_priority,image_id LIMIT 1) AS test_image ON true`
 
 type scanner interface{ Scan(...any) error }
 
@@ -228,7 +232,7 @@ func scanSource(row scanner) (domain.Source, error) {
 	var raw []byte
 	var lastChecked sql.NullTime
 	var testImageID sql.NullString
-	err := row.Scan(&v.ID, &v.CategoryID, &v.Name, &v.BaseURL, &v.DisplayURL, &v.RegistryHost, &v.Description, &v.Provider, &v.Country, &v.Region, &v.Operator, &raw, &v.IsOfficial, &v.IsCloudflare, &v.IsRecommended, &v.Enabled, &v.Priority, &v.SortOrder, &v.Maintenance, &v.ProbeConfigCustom, &v.ProbeMode, &v.TestRepository, &v.TestTag, &v.TestDigest, &v.RequestTimeout, &v.DownloadTestBytes, &v.Status, &v.ResponseMS, &lastChecked, &v.Error, &v.CreatedAt, &v.UpdatedAt, &testImageID, &v.TestImageReference, &v.TestImageMaxBytes)
+	err := row.Scan(&v.ID, &v.CategoryID, &v.Name, &v.BaseURL, &v.DisplayURL, &v.RegistryHost, &v.Description, &v.Provider, &v.Country, &v.Region, &v.Operator, &raw, &v.IsOfficial, &v.IsCloudflare, &v.IsRecommended, &v.Enabled, &v.Priority, &v.SortOrder, &v.Maintenance, &v.ProbeConfigCustom, &v.ProbeMode, &v.TestRepository, &v.TestTag, &v.TestDigest, &v.RequestTimeout, &v.DownloadTestBytes, &v.Status, &v.ResponseMS, &lastChecked, &v.Error, &v.CreatedAt, &v.UpdatedAt, &testImageID, &v.TestImageReference, &v.TestImageMaxBytes, &v.TestImageAuthStrategy)
 	if err != nil {
 		return v, err
 	}

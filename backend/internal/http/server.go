@@ -10,6 +10,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"sort"
@@ -97,6 +98,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("/api/v1/admin/totp", s.adminTOTP)
 	mux.HandleFunc("/api/v1/admin/test-images", s.adminTestImages)
 	mux.HandleFunc("/api/v1/admin/test-images/", s.adminTestImages)
+	mux.HandleFunc("/api/v1/admin/credential-profiles", s.adminCredentialProfiles)
+	mux.HandleFunc("/api/v1/admin/credential-profiles/", s.adminCredentialProfiles)
 	mux.HandleFunc("/api/v1/admin/notifications", s.adminNotifications)
 	mux.HandleFunc("/api/v1/admin/notifications/", s.adminNotifications)
 	mux.HandleFunc("/api/v1/admin/notification-rules", s.adminNotificationRules)
@@ -162,7 +165,12 @@ func (s *Server) allowPublicRequest(r *http.Request) bool {
 	if raw, err := strconv.Atoi(os.Getenv("PUBLIC_API_RATE_LIMIT")); err == nil && raw > 0 {
 		limit = raw
 	}
-	key := strings.TrimSpace(strings.Split(r.RemoteAddr, ":")[0])
+	key := strings.TrimSpace(r.RemoteAddr)
+	if host, _, err := net.SplitHostPort(key); err == nil {
+		key = host
+	} else if strings.HasPrefix(key, "[") && strings.Contains(key, "]") {
+		key = strings.Trim(key[1:strings.IndexByte(key, ']')], " ")
+	}
 	if key == "" {
 		key = "unknown"
 	}
@@ -213,14 +221,19 @@ func (s *Server) metrics(w http.ResponseWriter, _ *http.Request) {
 }
 func (s *Server) summary(w http.ResponseWriter, _ *http.Request) {
 	counts := map[string]int{"total": 0}
+	var lastUpdated *time.Time
 	for _, v := range s.store.Sources() {
 		if !v.Enabled {
 			continue
 		}
 		counts[v.Status]++
 		counts["total"]++
+		if !v.LastChecked.IsZero() && (lastUpdated == nil || v.LastChecked.After(*lastUpdated)) {
+			checkedAt := v.LastChecked
+			lastUpdated = &checkedAt
+		}
 	}
-	writeData(w, map[string]any{"counts": counts, "last_updated": time.Now().UTC()}, nil)
+	writeData(w, map[string]any{"counts": counts, "last_updated": lastUpdated}, nil)
 }
 func (s *Server) categories(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/api/v1/public/categories" {
@@ -424,6 +437,9 @@ func (s *Server) adminSources(w http.ResponseWriter, r *http.Request) {
 	}
 	v, err := s.store.UpsertSource(in, "")
 	if err != nil {
+		if writeSourceSaveError(w, err) {
+			return
+		}
 		writeError(w, 500, "INTERNAL_ERROR", "could not create source")
 		return
 	}
@@ -696,6 +712,9 @@ func (s *Server) adminSource(w http.ResponseWriter, r *http.Request) {
 			}
 			v, err := s.store.UpsertSource(input, "")
 			if err != nil {
+				if writeSourceSaveError(w, err) {
+					return
+				}
 				writeError(w, 500, "IMPORT_FAILED", "could not import source")
 				return
 			}
@@ -785,6 +804,9 @@ func (s *Server) adminSource(w http.ResponseWriter, r *http.Request) {
 			writeError(w, 404, "SOURCE_NOT_FOUND", "source not found")
 			return
 		}
+		if writeSourceSaveError(w, err) {
+			return
+		}
 		s.audit(r, user, "source.update", id, in)
 		writeData(w, v, nil)
 		return
@@ -801,6 +823,25 @@ func validateSourceInput(in domain.SourceInput) error {
 		return errors.New("http targets require ALLOW_INSECURE_HTTP=true")
 	}
 	return nil
+}
+
+func writeSourceSaveError(w http.ResponseWriter, err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, database.ErrTestImageNotApplicable) {
+		writeError(w, http.StatusBadRequest, "INVALID_TEST_IMAGE_SCOPE", "test_image_id is not applicable to category_id and probe_mode")
+		return true
+	}
+	if errors.Is(err, domain.ErrNotFound) {
+		writeError(w, http.StatusBadRequest, "INVALID_TEST_IMAGE", "test_image_id, category_id or source selector was not found")
+		return true
+	}
+	if strings.Contains(err.Error(), "test_image_id") || strings.Contains(err.Error(), "category_id is required") {
+		writeError(w, http.StatusBadRequest, "INVALID_TEST_IMAGE_SCOPE", err.Error())
+		return true
+	}
+	return false
 }
 
 func supportedProbeMode(mode string) bool {

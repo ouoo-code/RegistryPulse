@@ -91,6 +91,7 @@ ADMIN_PASSWORD=请设置高强度密码
 SESSION_SECRET=请设置随机密钥
 JWT_SECRET=请设置随机密钥
 ENCRYPTION_KEY=请设置随机密钥
+CREDENTIAL_ENCRYPTION_KEY=请设置32字节随机密钥（用于加密镜像仓库凭证）
 ~~~
 
 启动服务：

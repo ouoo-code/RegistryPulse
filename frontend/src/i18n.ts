@@ -13,11 +13,12 @@ const retryIntervalLabels = {
 
 const zh = {
   ...retryIntervalLabels.zh,
+  adminCredentials: '\u51ed\u8bc1\u914d\u7f6e', credentialName: '\u540d\u79f0', credentialType: '\u8ba4\u8bc1\u7c7b\u578b', credentialSelector: '\u5339\u914d\u8303\u56f4', credentialSecret: '\u5bc6\u94a5', credentialSource: '\u955c\u50cf\u6e90', credentialHost: '\u6ce8\u518c\u8868\u57df\u540d', credentialCategory: '\u955c\u50cf\u6e90\u7c7b\u522b', credentialSelectorHint: '\u51ed\u8bc1\u5339\u914d\u4f18\u5148\u7ea7\uff1a\u6e90 > \u57df\u540d > \u7c7b\u522b\uff1b\u5bc6\u94a5\u52a0\u5bc6\u5b58\u50a8\uff0c\u754c\u9762\u4e0d\u8fd4\u56de\u660e\u6587\u3002', credentialBasic: '\u57fa\u672c\u8ba4\u8bc1', credentialBearer: 'Bearer Token', credentialToken: 'Token', credentialSecretPlaceholder: '\u7559\u7a7a\u4ee5\u4fdd\u7559\u539f\u5bc6\u94a5', credentialNoSecret: '\u672a\u8bbe\u7f6e', credentialSaveError: '\u51ed\u8bc1\u4fdd\u5b58\u5931\u8d25', credentialDeleteError: '\u51ed\u8bc1\u5220\u9664\u5931\u8d25',
   categoryKey: '\u7c7b\u522b\u6807\u8bc6',
   podmanRegistryHint: '生成按当前镜像源类别匹配的 Podman registries.conf', pullTagCommands: 'docker pull / docker tag 命令',
   sourceCategories: '镜像源类别',
   sameCategoryHint: '请选择同一镜像源类别的站点后生成配置', dockerHubConfigHint: 'Docker Hub 支持生成 daemon.json 等运行时配置', registryConfigHint: '非 Docker Hub 镜像源请使用镜像前缀方式拉取', registryCommandHint: '将 user/image:tag 替换为实际镜像名称和标签',
-  testImage: '测试镜像', systemDefaultTestImage: '系统默认测试镜像', defaultImage: '默认', setDefaultImage: '设为默认',
+  testImage: '测试镜像', systemDefaultTestImage: '系统默认测试镜像', defaultImage: '默认', setDefaultImage: '设为默认', applicableCategories: '适用分类', applicableProbeModes: '适用探测模式', noLimit: '不限制', selectedScopeHint: '已选择范围', noApplicableTestImages: '当前分类和探测模式没有可用的启用测试镜像', authStrategy: '认证策略', authAnonymous: '匿名', authOptional: '可选认证', authRequired: '必须认证', authConfigured: '已配置', authNotConfigured: '未配置', authStatusUnknown: '状态未知', authSecretHint: '仅保存认证策略；密钥只显示配置状态，不在此处显示。',
   sortOrder: '排序号', associatedSources: '关联源数', categoryInUse: '该分类已关联镜像源，不能删除',
   home: '首页', tutorial: '教程', about: '关于', admin: '管理后台', configure: '配置生成器', brand: '容器镜像仓库实时监控',
   footer: '状态由后端真实探测生成 · 第三方镜像源可能随时变化', createdAt: '添加时间', runtimeDuration: '运行时间', all: '全部镜像源', categories: '镜像源分类', sources: '镜像源状态',
@@ -45,11 +46,12 @@ const zh = {
 
 const en = {
   ...retryIntervalLabels.en,
+  adminCredentials: 'Credentials', credentialName: 'Name', credentialType: 'Auth type', credentialSelector: 'Match scope', credentialSecret: 'Secret', credentialSource: 'Registry source', credentialHost: 'Registry host', credentialCategory: 'Registry category', credentialSelectorHint: 'Credential matching precedence: source > host > category. Secrets are encrypted at rest and never returned in plaintext.', credentialBasic: 'Basic auth', credentialBearer: 'Bearer token', credentialToken: 'Token', credentialSecretPlaceholder: 'Leave blank to keep the current secret', credentialNoSecret: 'Not set', credentialSaveError: 'Unable to save credential', credentialDeleteError: 'Unable to delete credential',
   categoryKey: 'Category key',
   podmanRegistryHint: 'Generate Podman registries.conf for the selected registry category', pullTagCommands: 'docker pull / docker tag commands',
   sourceCategories: 'Registry categories',
   sameCategoryHint: 'Select sources from the same registry category to generate a configuration', dockerHubConfigHint: 'Docker Hub supports daemon.json and other runtime configurations', registryConfigHint: 'For non-Docker Hub registries, use the mirror as an image prefix', registryCommandHint: 'Replace user/image:tag with the actual image and tag',
-  testImage: 'Test image', systemDefaultTestImage: 'System default test image', defaultImage: 'Default', setDefaultImage: 'Set default',
+  testImage: 'Test image', systemDefaultTestImage: 'System default test image', defaultImage: 'Default', setDefaultImage: 'Set default', applicableCategories: 'Applicable categories', applicableProbeModes: 'Applicable probe modes', noLimit: 'No restriction', selectedScopeHint: 'Restricted to selected values', noApplicableTestImages: 'No enabled test image matches this category and probe mode', authStrategy: 'Authentication strategy', authAnonymous: 'Anonymous', authOptional: 'Optional authentication', authRequired: 'Authentication required', authConfigured: 'Configured', authNotConfigured: 'Not configured', authStatusUnknown: 'Status unavailable', authSecretHint: 'Only the authentication strategy is stored here; secrets are represented by configuration status and never shown.',
   sortOrder: 'Sort order', associatedSources: 'Associated sources', categoryInUse: 'This category has associated sources and cannot be deleted',
   home: 'Home', tutorial: 'Guide', about: 'About', admin: 'Admin', configure: 'Config generator', brand: 'Container registry monitor',
   footer: 'Status comes from live probes · Third-party registries may change', createdAt: 'Added at', runtimeDuration: 'Runtime', all: 'All registries', categories: 'Categories', sources: 'Registry status',

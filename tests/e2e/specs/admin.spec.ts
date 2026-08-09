@@ -21,6 +21,46 @@ test('admin token can load the source management page', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Sources', exact: true })).toBeVisible()
 })
 
+test('test image editor keeps its structured layout', async ({ page }) => {
+  await page.addInitScript(() => {
+    sessionStorage.setItem('admin-token', 'layout-test-token')
+  })
+  await page.route('**/api/v1/admin/sources', route => route.fulfill({ json: { success: true, data: [] } }))
+  await page.route('**/api/v1/admin/categories', route => route.fulfill({
+    json: {
+      success: true,
+      data: [
+        { id: 'dockerhub', slug: 'DockerHub', name: 'Docker Hub', description: '', enabled: true },
+        { id: 'ghcr', slug: 'GHCR', name: 'GitHub Container Registry', description: '', enabled: true },
+        { id: 'quay', slug: 'Quay', name: 'Quay', description: '', enabled: true },
+      ],
+    },
+  }))
+  await page.route('**/api/v1/admin/test-images**', route => route.fulfill({ json: { success: true, data: [] } }))
+  await page.goto('/admin')
+  await page.getByRole('button', { name: 'Test images', exact: true }).click()
+  await page.locator('.admin-resource-section').getByRole('button', { name: 'Add', exact: true }).click()
+
+  const form = page.locator('.test-image-editor-form')
+  const scopeFields = form.locator('.test-image-scope-field')
+  const firstCheckbox = form.locator('.checkbox-list-item input[type="checkbox"]').first()
+  const footer = form.locator('.test-image-editor-footer')
+  await expect(form).toHaveCSS('display', 'flex')
+  await expect(scopeFields).toHaveCount(2)
+  await expect(firstCheckbox).toHaveCSS('width', '16px')
+
+  const categoryBox = await scopeFields.nth(0).boundingBox()
+  const modeBox = await scopeFields.nth(1).boundingBox()
+  const footerBox = await footer.boundingBox()
+  expect(categoryBox).not.toBeNull()
+  expect(modeBox).not.toBeNull()
+  expect(footerBox).not.toBeNull()
+  expect(categoryBox!.width).toBeGreaterThan(300)
+  expect(modeBox!.width).toBeGreaterThan(300)
+  expect(Math.abs(categoryBox!.y - modeBox!.y)).toBeLessThan(4)
+  expect(footerBox!.y).toBeGreaterThan(categoryBox!.y + categoryBox!.height)
+})
+
 test('administrator can add, probe, inspect, and remove a source', async ({ page }) => {
   test.skip(!process.env.E2E_ADMIN_PASSWORD, 'Set E2E_ADMIN_PASSWORD to run the authenticated admin flow.')
   const name = `E2E Registry ${Date.now()}`

@@ -1,17 +1,17 @@
 -- Initial application data for a fresh Registry Pulse installation.
 -- Runtime probe results, users and sessions are intentionally not seeded.
 
-INSERT INTO test_images(reference, enabled, max_bytes, is_default)
+INSERT INTO test_images(reference, enabled, max_bytes, is_default, auth_strategy)
 VALUES
-  ('beats/metricbeat:8.15.0', true, 2097152, false),
-  ('dotnet/runtime:8.0', true, 2097152, false),
-  ('google-containers/pause:3.9', true, 2097152, false),
-  ('library/alpine:latest', true, 1048576, true),
-  ('library/hello-world:latest', true, 1048576, false),
-  ('nvidia/cuda:12.4.1-base-ubuntu22.04', true, 2097152, false),
-  ('pause:3.9', true, 2097152, false),
-  ('prometheus/busybox:latest', true, 2097152, false),
-  ('stefanprodan/podinfo:latest', true, 2097152, false);
+  ('beats/metricbeat:8.15.0', true, 2097152, false, 'optional'),
+  ('dotnet/runtime:8.0', true, 2097152, false, 'optional'),
+  ('google-containers/pause:3.9', true, 2097152, false, 'optional'),
+  ('library/alpine:latest', true, 1048576, true, 'anonymous'),
+  ('library/hello-world:latest', true, 1048576, false, 'anonymous'),
+  ('nvidia/cuda:12.4.1-base-ubuntu22.04', true, 2097152, false, 'optional'),
+  ('pause:3.9', true, 2097152, false, 'anonymous'),
+  ('prometheus/busybox:latest', true, 2097152, false, 'optional'),
+  ('stefanprodan/podinfo:latest', true, 2097152, false, 'optional');
 
 INSERT INTO registry_categories(
     id, slug, name, description, icon, official_url,
@@ -43,6 +43,29 @@ WHERE i.reference = CASE c.id
   WHEN 'nvcr' THEN 'nvidia/cuda:12.4.1-base-ubuntu22.04'
   ELSE NULL
 END;
+
+INSERT INTO test_image_categories(test_image_id, category_id)
+SELECT i.id, mapping.category_id
+FROM test_images i
+JOIN (VALUES
+  ('beats/metricbeat:8.15.0', 'elastic'),
+  ('dotnet/runtime:8.0', 'mcr'),
+  ('google-containers/pause:3.9', 'gcr'),
+  ('library/alpine:latest', 'dockerhub'),
+  ('library/alpine:latest', 'custom'),
+  ('nvidia/cuda:12.4.1-base-ubuntu22.04', 'nvcr'),
+  ('pause:3.9', 'k8s'),
+  ('prometheus/busybox:latest', 'quay'),
+  ('stefanprodan/podinfo:latest', 'ghcr')
+) AS mapping(reference, category_id) ON mapping.reference = i.reference
+ON CONFLICT DO NOTHING;
+
+INSERT INTO test_image_probe_modes(test_image_id, probe_mode)
+SELECT i.id, mode.probe_mode
+FROM test_images i
+CROSS JOIN (VALUES ('registry'), ('manifest'), ('docker_pull')) AS mode(probe_mode)
+WHERE i.reference <> 'library/hello-world:latest'
+ON CONFLICT DO NOTHING;
 
 INSERT INTO permissions(name)
 VALUES

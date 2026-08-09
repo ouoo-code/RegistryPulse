@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { adminApi, adminRequest, exportSources, importSources } from '../../admin-api'
-import { type Category, type Source, type SourceInput, type TestImage } from '../../api'
+import { type Category, type Source, type SourceInput, type TestImage, type TestImageCategoryRef } from '../../api'
 import { statusLabel, useI18n } from '../../i18n'
 import BaseDialog from '../BaseDialog.vue'
 import BaseTable from '../BaseTable.vue'
@@ -51,13 +51,42 @@ function bytesToMiB(bytes: number) {
 const emptyForm = (): SourceInput => ({ name: '', base_url: '', category_id: '', provider: '', region: '', tags: [], enabled: true, maintenance: false, probe_config_custom: false, probe_mode: 'registry', description: '', country: '', operator: '', test_image_id: '', request_timeout_seconds: 15 })
 const form = ref<SourceInput>(emptyForm())
 const categoryConfig = computed(() => categories.value.find(category => category.id === form.value.category_id))
+const testImageLoading = ref(false)
+let testImageRequestId = 0
+function categoryRefs(image: TestImage): string[] {
+  const refs: TestImageCategoryRef[] = image.applicable_categories || []
+  return [...(image.applicable_category_ids || []), ...(image.category_ids || []), ...refs.map(value => typeof value === 'string' ? value : [value.id, value.slug].filter(Boolean).join('|'))]
+}
+function appliesToCategory(image: TestImage, category: Category | undefined) {
+  const refs = categoryRefs(image).filter(Boolean)
+  if (!refs.length || !category) return true
+  const candidates = [category.id, category.slug].map(value => value.toLowerCase())
+  return refs.some(value => value.split('|').some(part => candidates.includes(part.toLowerCase())))
+}
+function appliesToProbeMode(image: TestImage, mode: string) {
+  const modes = [...(image.applicable_probe_modes || []), ...(image.probe_modes || [])]
+  return !modes.length || modes.some(value => value.toLowerCase() === mode.toLowerCase())
+}
+function categoryImageIds(category: Category | undefined) {
+  if (!category) return undefined
+  const ids = [...(category.available_test_image_ids || []), ...(category.available_test_images || category.test_images || []).map(image => image.id)]
+  return ids.length ? new Set(ids) : undefined
+}
+const applicableTestImages = computed(() => {
+  const category = categoryConfig.value
+  const categoryImages = category?.available_test_images || category?.test_images || []
+  const byId = new Map<string, TestImage>()
+  for (const image of [...testImages.value, ...categoryImages]) byId.set(image.id, image)
+  const allowedIds = categoryImageIds(category)
+  return [...byId.values()].filter(image => image.enabled && (!allowedIds || allowedIds.has(image.id)) && appliesToCategory(image, category) && appliesToProbeMode(image, form.value.probe_mode || 'registry'))
+})
 const categoryDefaultTestImage = computed(() => {
   const category = categoryConfig.value
   if (category?.default_test_image_id) {
-    const configuredImage = testImages.value.find(image => image.id === category.default_test_image_id && image.enabled)
+    const configuredImage = applicableTestImages.value.find(image => image.id === category.default_test_image_id)
     if (configuredImage) return configuredImage
   }
-  return testImages.value.find(image => image.is_default && image.enabled)
+  return applicableTestImages.value.find(image => image.is_default)
 })
 const categoryProbeSummary = computed(() => {
   const category = categoryConfig.value
@@ -116,6 +145,22 @@ async function refresh() {
   } catch (error) { handleError(t.value.apiError)(error) } finally { loading.value = false }
 }
 
+async function refreshApplicableTestImages() {
+  const requestId = ++testImageRequestId
+  testImageLoading.value = true
+  try {
+    const result = await adminApi.testImages(props.token, {
+      category_id: form.value.category_id || undefined,
+      probe_mode: form.value.probe_mode || undefined,
+    })
+    if (requestId === testImageRequestId) testImages.value = result
+  } catch {
+    // Keep the last list; the local applicability check remains the safe fallback for older APIs.
+  } finally {
+    if (requestId === testImageRequestId) testImageLoading.value = false
+  }
+}
+
 function openCreate() {
   editing.value = null
   form.value = emptyForm()
@@ -145,10 +190,10 @@ function splitImageReference(reference: string) {
 
 function effectiveTestImage() {
   if (form.value.probe_config_custom && form.value.test_image_id) {
-    return testImages.value.find(image => image.id === form.value.test_image_id && image.enabled)
+    return applicableTestImages.value.find(image => image.id === form.value.test_image_id)
   }
   return form.value.probe_config_custom
-    ? testImages.value.find(image => image.is_default && image.enabled) || categoryDefaultTestImage.value
+    ? applicableTestImages.value.find(image => image.is_default) || categoryDefaultTestImage.value
     : categoryDefaultTestImage.value
 }
 
@@ -240,7 +285,10 @@ function closeEditor() { editorOpen.value = false; editing.value = null; testFee
 async function save() {
   try {
     const path = editing.value ? `/admin/sources/${editing.value.id}` : '/admin/sources'
-    await adminRequest<Source>(props.token, path, { method: editing.value ? 'PUT' : 'POST', body: JSON.stringify({ ...form.value, tags: tagText.value.split(',').map(tag => tag.trim()).filter(Boolean) }) })
+    const safeImageID = form.value.probe_config_custom
+      ? (applicableTestImages.value.find(image => image.id === form.value.test_image_id)?.id || '')
+      : ''
+    await adminRequest<Source>(props.token, path, { method: editing.value ? 'PUT' : 'POST', body: JSON.stringify({ ...form.value, test_image_id: safeImageID, tags: tagText.value.split(',').map(tag => tag.trim()).filter(Boolean) }) })
     emit('notice', t.value.saveSuccess)
     closeEditor()
     await refresh()
@@ -335,6 +383,12 @@ async function importFile(event: Event) {
 }
 
 onMounted(refresh)
+watch(() => [form.value.category_id, form.value.probe_mode] as const, () => {
+  if (editorOpen.value) void refreshApplicableTestImages()
+})
+watch(applicableTestImages, images => {
+  if (form.value.test_image_id && !images.some(image => image.id === form.value.test_image_id)) form.value.test_image_id = ''
+})
 onUnmounted(() => {
   if (testFeedbackTimer !== undefined) window.clearTimeout(testFeedbackTimer)
 })
@@ -382,7 +436,7 @@ defineExpose({ refresh, openCreate })
       <FormField :label="t.tags"><input v-model="tagText" placeholder="official, cn"></FormField>
       <FormField class="form-field-description" :label="t.description"><textarea v-model="form.description" rows="1"></textarea></FormField>
       <div class="checkbox-field probe-config-toggle"><input id="source-probe-config-custom" v-model="form.probe_config_custom" type="checkbox" @change="toggleProbeConfig"><label class="probe-config-toggle-label" for="source-probe-config-custom">{{ probeConfigLabel }}</label><span v-if="testFeedback" class="probe-test-feedback" :class="`is-${testFeedback.tone}`" role="status" aria-live="polite">{{ testFeedback.message }}</span><button class="icon-button probe-test-button" type="button" :disabled="testingConfig" :aria-busy="testingConfig" @click="testConfiguration">{{ testingConfig ? testRunningLabel : testButtonLabel }}</button></div>
-      <FormField class="form-field-test-image" :label="t.testImage"><select v-model="form.test_image_id" :disabled="!form.probe_config_custom"><option value="">{{ t.systemDefaultTestImage }}</option><option v-for="image in testImages.filter(item => item.enabled)" :key="image.id" :value="image.id">{{ image.reference }} · {{ bytesToMiB(image.max_bytes) }} M</option></select></FormField>
+      <FormField class="form-field-test-image" :label="t.testImage"><select v-model="form.test_image_id" :disabled="!form.probe_config_custom"><option value="">{{ t.systemDefaultTestImage }}</option><option v-for="image in applicableTestImages" :key="image.id" :value="image.id">{{ image.reference }} · {{ bytesToMiB(image.max_bytes) }} M</option></select><small v-if="testImageLoading" class="test-image-filter-hint">{{ t.loading }}</small><small v-else-if="!applicableTestImages.length" class="test-image-filter-hint">{{ t.noApplicableTestImages }}</small></FormField>
       <FormField class="form-field-probe-mode" :label="t.probeMode"><select v-model="form.probe_mode" :disabled="!form.probe_config_custom"><option value="registry">{{ t.registryProbe }}</option><option value="manifest">{{ t.manifestProbe }}</option><option value="http">{{ t.httpProbe }}</option><option value="docker_pull">{{ t.dockerPullProbe }}</option></select></FormField>
       <FormField class="form-field-timeout" :label="t.timeout"><input v-model.number="form.request_timeout_seconds" :readonly="!form.probe_config_custom" type="number" min="1" max="300"></FormField>
       <div class="editor-checks"><label class="checkbox-field"><input v-model="form.enabled" type="checkbox"><span>{{ t.enabled }}</span></label><label class="checkbox-field"><input v-model="form.is_official" type="checkbox"><span>{{ t.official }}</span></label><label class="checkbox-field"><input v-model="form.is_recommended" type="checkbox"><span>{{ t.recommended }}</span></label><label class="checkbox-field"><input v-model="form.maintenance" type="checkbox"><span>{{ t.maintenance }}</span></label></div>

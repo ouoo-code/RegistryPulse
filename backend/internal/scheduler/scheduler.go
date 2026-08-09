@@ -16,11 +16,13 @@ import (
 	"github.com/ouoo-code/RegistryPulse/internal/incident"
 	"github.com/ouoo-code/RegistryPulse/internal/metrics"
 	"github.com/ouoo-code/RegistryPulse/internal/probe"
+	"github.com/ouoo-code/RegistryPulse/internal/registry"
 	"github.com/redis/go-redis/v9"
 )
 
 type ProbeFunc func(context.Context, string, time.Duration) probe.Result
 type SourceProvider func(context.Context) ([]domain.Source, error)
+type CredentialProvider func(context.Context, domain.Source) (domain.ResolvedCredential, bool, error)
 
 // ResultRecorder is the persistence boundary. Implementations may write the
 // probe result, status transition and incident event to PostgreSQL, a queue, or
@@ -73,6 +75,7 @@ type Config struct {
 	IntervalProvider, RetryIntervalProvider                                  func(context.Context) time.Duration
 	RunLockKey, SourceLockPrefix                                             string
 	Locker                                                                   Locker
+	CredentialProvider                                                       CredentialProvider
 }
 
 func (c Config) withDefaults() Config {
@@ -318,7 +321,21 @@ func (r *Runner) safeProbe(ctx context.Context, source domain.Source) (result pr
 		case probe.ModeHTTP:
 			result = probe.RunHTTP(ctx, source.BaseURL, timeout)
 		default:
-			result = probe.RunWithOptions(ctx, source.BaseURL, timeout, probe.Options{TestRepository: source.TestRepository, TestTag: source.TestTag, DownloadTestBytes: source.DownloadTestBytes, SkipBlob: source.ProbeMode == probe.ModeManifest})
+			var credentials *registry.Credentials
+			if r.cfg.CredentialProvider != nil {
+				resolved, found, credentialErr := r.cfg.CredentialProvider(ctx, source)
+				if credentialErr != nil {
+					result = probe.Result{Status: "offline", ErrorStage: "authentication", Error: "credential resolution failed"}
+				} else if found {
+					credentials = &registry.Credentials{AuthType: resolved.AuthType, Username: resolved.Username, Secret: resolved.Secret}
+				}
+			}
+			if result.Error == "" && strings.EqualFold(source.TestImageAuthStrategy, "required") && credentials == nil {
+				result = probe.Result{Status: "offline", ErrorStage: "authentication", Error: "required credential profile not found"}
+			}
+			if result.Error == "" {
+				result = probe.RunWithOptions(ctx, source.BaseURL, timeout, probe.Options{TestRepository: source.TestRepository, TestTag: source.TestTag, DownloadTestBytes: source.DownloadTestBytes, SkipBlob: source.ProbeMode == probe.ModeManifest, Credentials: credentials})
+			}
 		}
 		if result.Status == "online" || attempt == r.cfg.ProbeRetries {
 			return result

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/ouoo-code/RegistryPulse/internal/domain"
@@ -129,5 +130,21 @@ func TestValidateSourceInputRequiresHTTPSByDefault(t *testing.T) {
 	t.Setenv("ALLOW_INSECURE_HTTP", "true")
 	if err := validateSourceInput(domain.SourceInput{Name: "local", BaseURL: "http://127.0.0.1:8080"}); err != nil {
 		t.Fatalf("expected explicitly allowed HTTP source, got %v", err)
+	}
+}
+
+func TestSourceCreateDoesNotEchoUnknownCredentialFields(t *testing.T) {
+	t.Setenv("ADMIN_API_TOKEN", "credential-echo-test")
+	s := New(domain.NewMemoryStore())
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/sources", bytes.NewBufferString(`{"name":"credential boundary","base_url":"https://registry.example","category_id":"dockerhub","username":"alice","password":"plain-secret","credential":"another-secret"}`))
+	req.Header.Set("Authorization", "Bearer credential-echo-test")
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+	s.Routes().ServeHTTP(res, req)
+	if res.Code != http.StatusCreated {
+		t.Fatalf("status=%d body=%s", res.Code, res.Body.String())
+	}
+	if strings.Contains(res.Body.String(), "plain-secret") || strings.Contains(res.Body.String(), "another-secret") || strings.Contains(res.Body.String(), `"password"`) {
+		t.Fatalf("source response echoed credential material: %s", res.Body.String())
 	}
 }

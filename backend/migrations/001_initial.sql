@@ -12,6 +12,8 @@ CREATE TABLE test_images (
     enabled boolean NOT NULL DEFAULT true,
     max_bytes bigint NOT NULL DEFAULT 2097152,
     is_default boolean NOT NULL DEFAULT false,
+    auth_strategy text NOT NULL DEFAULT 'anonymous'
+        CHECK (auth_strategy IN ('anonymous', 'optional', 'required')),
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -36,6 +38,23 @@ CREATE TABLE registry_categories (
     sort_order integer NOT NULL DEFAULT 0,
     created_at timestamptz NOT NULL DEFAULT now()
 );
+
+-- An empty relation set means the image is unrestricted for that dimension.
+CREATE TABLE test_image_categories (
+    test_image_id uuid NOT NULL REFERENCES test_images(id) ON DELETE CASCADE,
+    category_id text NOT NULL REFERENCES registry_categories(id) ON DELETE CASCADE,
+    PRIMARY KEY (test_image_id, category_id)
+);
+CREATE INDEX test_image_categories_category_idx
+    ON test_image_categories(category_id, test_image_id);
+
+CREATE TABLE test_image_probe_modes (
+    test_image_id uuid NOT NULL REFERENCES test_images(id) ON DELETE CASCADE,
+    probe_mode text NOT NULL CHECK (probe_mode IN ('registry', 'manifest', 'http', 'docker_pull')),
+    PRIMARY KEY (test_image_id, probe_mode)
+);
+CREATE INDEX test_image_probe_modes_mode_idx
+    ON test_image_probe_modes(probe_mode, test_image_id);
 
 CREATE TABLE registry_sources (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -74,6 +93,29 @@ CREATE TABLE registry_sources (
 );
 CREATE INDEX registry_sources_category_sort_idx
     ON registry_sources(category_id, sort_order, priority, name);
+
+-- Credentials are independent from test images. Secrets are encrypted before
+-- insertion; only selector metadata is used for matching and API responses.
+CREATE TABLE credential_profiles (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    name text UNIQUE NOT NULL,
+    auth_type text NOT NULL DEFAULT 'basic'
+        CHECK (auth_type IN ('basic', 'bearer', 'token')),
+    username text NOT NULL DEFAULT '',
+    secret_ciphertext bytea NOT NULL DEFAULT ''::bytea,
+    secret_nonce bytea NOT NULL DEFAULT ''::bytea,
+    secret_fingerprint text NOT NULL DEFAULT '',
+    secret_last4 text NOT NULL DEFAULT '',
+    source_id uuid REFERENCES registry_sources(id) ON DELETE CASCADE,
+    registry_host text NOT NULL DEFAULT '',
+    category_id text REFERENCES registry_categories(id) ON DELETE CASCADE,
+    enabled boolean NOT NULL DEFAULT true,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    CHECK (source_id IS NOT NULL OR NULLIF(registry_host, '') IS NOT NULL OR category_id IS NOT NULL)
+);
+CREATE INDEX credential_profiles_match_idx
+    ON credential_profiles(source_id, lower(registry_host), category_id, enabled);
 
 CREATE TABLE users (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

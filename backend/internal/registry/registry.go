@@ -71,9 +71,16 @@ func splitHeader(header string) []string {
 }
 
 type Client struct {
-	BaseURL    string
-	HTTPClient *http.Client
-	UserAgent  string
+	BaseURL     string
+	HTTPClient  *http.Client
+	UserAgent   string
+	Credentials *Credentials
+}
+
+type Credentials struct {
+	AuthType string
+	Username string
+	Secret   string
 }
 
 type Manifest struct {
@@ -121,10 +128,24 @@ func (c Client) request(ctx context.Context, method, path string, headers http.H
 			req.Header.Add(key, value)
 		}
 	}
+	c.applyCredentials(req, token)
+	return c.client().Do(req)
+}
+
+func (c Client) applyCredentials(req *http.Request, token string) {
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
+		return
 	}
-	return c.client().Do(req)
+	if c.Credentials == nil || c.Credentials.Secret == "" {
+		return
+	}
+	switch strings.ToLower(c.Credentials.AuthType) {
+	case "basic":
+		req.SetBasicAuth(c.Credentials.Username, c.Credentials.Secret)
+	case "bearer", "token":
+		req.Header.Set("Authorization", "Bearer "+c.Credentials.Secret)
+	}
 }
 
 func (c Client) token(ctx context.Context, challenge BearerChallenge) (string, error) {
@@ -147,6 +168,7 @@ func (c Client) token(ctx context.Context, challenge BearerChallenge) (string, e
 	if c.UserAgent != "" {
 		req.Header.Set("User-Agent", c.UserAgent)
 	}
+	c.applyCredentials(req, "")
 	resp, err := c.client().Do(req)
 	if err != nil {
 		return "", err

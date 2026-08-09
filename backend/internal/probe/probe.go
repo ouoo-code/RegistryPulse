@@ -71,6 +71,7 @@ type Options struct {
 	TestTag           string
 	DownloadTestBytes int64
 	SkipBlob          bool
+	Credentials       *registry.Credentials
 }
 
 const (
@@ -242,7 +243,7 @@ func RunWithOptions(ctx context.Context, raw string, timeout time.Duration, opti
 		_, err := pinHost(req.Context(), req.URL.Hostname())
 		return err
 	}}
-	probeClient := registry.Client{BaseURL: strings.TrimRight(raw, "/"), HTTPClient: client, UserAgent: "registrypulse/0.1"}
+	probeClient := registry.Client{BaseURL: strings.TrimRight(raw, "/"), HTTPClient: client, UserAgent: "registrypulse/0.1", Credentials: options.Credentials}
 	tlsStart := time.Now()
 	registryStart := time.Now()
 	result.RegistryStatus, result.RegistryAPIVersion, err = probeClient.CheckV2Details(ctx)

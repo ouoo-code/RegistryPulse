@@ -87,6 +87,7 @@ ADMIN_PASSWORD=use-a-strong-password
 SESSION_SECRET=use-a-random-secret
 JWT_SECRET=use-a-random-secret
 ENCRYPTION_KEY=use-a-random-secret
+CREDENTIAL_ENCRYPTION_KEY=use-a-random-32-byte-secret
 ~~~
 
 The default port settings are:

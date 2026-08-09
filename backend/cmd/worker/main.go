@@ -89,6 +89,7 @@ func main() {
 	defer stop()
 	var store domain.Store = domain.NewMemoryStore()
 	var recorder scheduler.ResultRecorder = resultRecorder{logger: slog.Default()}
+	var credentialProvider scheduler.CredentialProvider
 	var closeDB func() = func() {}
 	failureThreshold := envInt("FAILURE_THRESHOLD", 3)
 	recoveryThreshold := envInt("RECOVERY_THRESHOLD", 2)
@@ -109,6 +110,9 @@ func main() {
 		}
 		dbStore := database.NewStore(db)
 		store = dbStore
+		credentialProvider = func(ctx context.Context, source domain.Source) (domain.ResolvedCredential, bool, error) {
+			return database.ResolveCredential(ctx, db, source.ID, source.RegistryHost, source.CategoryID)
+		}
 		recorder = notifyingRecorder{store: dbStore, logger: slog.Default()}
 		failureThreshold = dbSettingInt(db, "failure_threshold", failureThreshold)
 		recoveryThreshold = dbSettingInt(db, "recovery_threshold", recoveryThreshold)
@@ -203,7 +207,7 @@ func main() {
 	for _, source := range store.Sources() {
 		machine.Seed(source.ID, source.Status, source.Maintenance)
 	}
-	runner := scheduler.New(scheduler.Config{Interval: interval, IntervalProvider: intervalProvider, RetryIntervalProvider: retryIntervalProvider, Jitter: jitter, MaxConcurrent: maxConcurrent, ProbeTimeout: 15 * time.Second, ResultTimeout: time.Duration(envInt("RESULT_TIMEOUT_SECONDS", 10)) * time.Second, ResultRetries: envInt("RESULT_RETRIES", 2), ProbeRetries: envInt("PROBE_RETRIES", 2), Locker: locker}, func(ctx context.Context) ([]domain.Source, error) { return store.Sources(), nil }, recorder, machine, nil)
+	runner := scheduler.New(scheduler.Config{Interval: interval, IntervalProvider: intervalProvider, RetryIntervalProvider: retryIntervalProvider, Jitter: jitter, MaxConcurrent: maxConcurrent, ProbeTimeout: 15 * time.Second, ResultTimeout: time.Duration(envInt("RESULT_TIMEOUT_SECONDS", 10)) * time.Second, ResultRetries: envInt("RESULT_RETRIES", 2), ProbeRetries: envInt("PROBE_RETRIES", 2), Locker: locker, CredentialProvider: credentialProvider}, func(ctx context.Context) ([]domain.Source, error) { return store.Sources(), nil }, recorder, machine, nil)
 	slog.Info("worker started", "normal_interval", interval, "retry_interval", retryInterval, "max_concurrent", maxConcurrent)
 	if err := runner.Run(ctx); err != nil && ctx.Err() == nil {
 		slog.Error("worker stopped with error", "error", err)

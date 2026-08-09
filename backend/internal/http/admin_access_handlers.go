@@ -72,8 +72,13 @@ func (s *Server) adminUsers(w http.ResponseWriter, r *http.Request) {
 			writeError(w, 400, "INVALID_USER", "user id is required")
 			return
 		}
-		if _, err := db.ExecContext(r.Context(), `UPDATE users SET is_active=false,updated_at=now() WHERE id=$1`, id); err != nil {
+		result, err := db.ExecContext(r.Context(), `UPDATE users SET is_active=false,updated_at=now() WHERE id=$1`, id)
+		if err != nil {
 			writeError(w, 400, "USER_DELETE_FAILED", err.Error())
+			return
+		}
+		if count, _ := result.RowsAffected(); count == 0 {
+			writeError(w, 404, "USER_NOT_FOUND", "user not found")
 			return
 		}
 		s.audit(r, user, "user.disable", id, nil)
