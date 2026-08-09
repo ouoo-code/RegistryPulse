@@ -178,6 +178,41 @@ PROBE_DOWNLOAD_BYTES=2097152
 
 正常轮询和异常重试相互独立。每个正常检测周期都会保存一条记录；同一故障期间的异常重试会根据状态是否变化进行去重，避免日志快速膨胀。
 
+### Docker Pull 探测说明
+
+如果在后台选择 `docker pull` 探测，但提示：
+
+```text
+探测配置测试失败: docker pull disabled
+```
+
+表示项目没有启用真实 Docker Pull。默认配置为：
+
+```env
+ENABLE_REAL_DOCKER_PULL=false
+```
+
+如确实需要启用，请修改 `.env`：
+
+```env
+ENABLE_REAL_DOCKER_PULL=true
+```
+
+同时 API/Worker 容器必须挂载宿主机 Docker Engine Socket：
+
+```yaml
+volumes:
+  - /var/run/docker.sock:/var/run/docker.sock
+```
+
+Windows Docker Desktop 通常使用：
+
+```yaml
+- //var/run/docker.sock:/var/run/docker.sock
+```
+
+Docker Socket 权限很高，启用后应用可以调用宿主机 Docker，存在安全风险。普通镜像站连通性检测建议使用“注册表探测”或“Manifest 探测”，它们更安全、速度也更快。
+
 ## 配置生成器
 
 支持 Docker daemon.json、1Panel Docker 配置、Podman registries.conf、Containerd 配置，以及镜像前缀拉取和重新标记命令。

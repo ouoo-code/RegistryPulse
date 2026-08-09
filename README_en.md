@@ -182,6 +182,41 @@ PROBE_DOWNLOAD_BYTES=2097152
 
 Normal polling and failure retries are independent. Each normal probe cycle stores one result. Failure retries during the same incident are deduplicated according to state changes to prevent rapid log growth.
 
+### Docker Pull Probe
+
+If the administration console reports:
+
+```text
+Probe configuration test failed: docker pull disabled
+```
+
+the real Docker Pull probe is not enabled. It is disabled by default:
+
+```env
+ENABLE_REAL_DOCKER_PULL=false
+```
+
+To enable it explicitly, change `.env`:
+
+```env
+ENABLE_REAL_DOCKER_PULL=true
+```
+
+The API/Worker containers must also mount the host Docker Engine socket:
+
+```yaml
+volumes:
+  - /var/run/docker.sock:/var/run/docker.sock
+```
+
+For Docker Desktop on Windows, the equivalent mount is commonly:
+
+```yaml
+- //var/run/docker.sock:/var/run/docker.sock
+```
+
+The Docker Socket grants powerful control over the host Docker Engine. Enable this mode only when that trust boundary is acceptable. For ordinary registry availability checks, use Registry API or Manifest probing instead; they are safer and faster.
+
 ## Configuration Generator
 
 Supports Docker daemon.json, 1Panel Docker configuration, Podman registries.conf, Containerd configuration, and image-prefix pull and retag commands.
