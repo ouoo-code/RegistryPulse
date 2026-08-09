@@ -242,6 +242,45 @@ docker tag ghcr.example.com/user/image:tag ghcr.io/user/image:tag
 
 The administration console is available at `/admin`. It supports source, category, test image, manual probe, task, history, incident, system settings, password, optional TOTP, import/export, notification, and notification rule management.
 
+### Credential profiles
+
+Credential profiles provide authentication data for registry probes that require access. Three authentication types are available:
+
+| Auth type | Request format | Typical use | Username | Secret |
+| --- | --- | --- | --- | --- |
+| Basic authentication | `Authorization: Basic ...` | Private registries and enterprise repositories | Registry username | Password or access password |
+| Bearer Token | `Authorization: Bearer ...` | GHCR PATs, private registry tokens, and cloud registry tokens | Usually empty | Bearer token or PAT |
+| Token | Also sent as Bearer in the current implementation | Generic access tokens or PATs | Usually empty | Access token |
+
+`Bearer Token` and `Token` currently have the same HTTP behavior. The distinction is mainly descriptive; use `Bearer Token` when the registry explicitly documents standard Bearer authentication.
+
+A credential can be matched by:
+
+1. **Registry source**: one exact source, with the highest priority.
+2. **Registry host**: all sources using a host such as `ghcr.io` or `registry.example.com`. Enter only the hostname, without `https://`, a path, or `/v2/`.
+3. **Registry category**: all sources in a category such as GHCR or MCR.
+
+Matching precedence is:
+
+```text
+Exact source > registry host > registry category
+```
+
+Examples:
+
+```text
+Private registry: Basic authentication, username admin, password as the secret, matched to registry.example.com
+GHCR: Bearer Token, leave username empty, use a GitHub Personal Access Token, matched to ghcr.io or the GHCR category
+```
+
+Test-image authentication strategy is separate from credential type:
+
+- **Anonymous**: credentials are not required.
+- **Optional authentication**: use matching credentials when available, otherwise continue anonymously.
+- **Authentication required**: fail authentication when no matching credential exists.
+
+Secrets are encrypted at rest and never returned in plaintext. Production deployments must set a random 32-byte `CREDENTIAL_ENCRYPTION_KEY` and back it up securely.
+
 Notification channels include Gotify, Webhook, and SMTP Email. Template variables include:
 
 ~~~text

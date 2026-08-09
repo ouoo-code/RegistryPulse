@@ -238,6 +238,45 @@ docker tag ghcr.example.com/user/image:tag ghcr.io/user/image:tag
 
 管理后台位于 /admin，支持镜像源、分类、测试镜像、手动探测、任务、历史、故障事件、系统设置、密码、可选 TOTP、导入导出、通知和通知规则管理。
 
+### 凭证配置
+
+凭证配置用于为需要认证的镜像源探测提供登录信息，支持三种认证类型：
+
+| 认证类型 | 请求方式 | 适用场景 | 用户名 | 密钥 |
+| --- | --- | --- | --- | --- |
+| Basic authentication | `Authorization: Basic ...` | 私有 Registry、企业内部仓库 | 填写 Registry 用户名 | 填写密码或访问密码 |
+| Bearer Token | `Authorization: Bearer ...` | GHCR PAT、私有 Registry Token、云厂商 Token | 通常留空 | 填写 Bearer Token 或 PAT |
+| Token | 当前实现同样使用 Bearer | 泛指访问 Token 或 PAT | 通常留空 | 填写访问 Token |
+
+`Bearer Token` 和 `Token` 在当前版本中的实际 HTTP 发送方式相同，区别主要是配置名称。已有明确 Bearer 规范的仓库建议选择 `Bearer Token`。
+
+凭证匹配范围可以选择：
+
+1. **镜像源**：只匹配一个具体镜像源，优先级最高。
+2. **注册表域名**：匹配同一域名下的镜像源，例如 `ghcr.io` 或 `registry.example.com`。只填写域名，不要填写 `https://`、路径或 `/v2/`。
+3. **镜像源类别**：匹配整个 GHCR、MCR 等类别。
+
+匹配优先级为：
+
+```text
+特定镜像源 > 注册表域名 > 镜像源类别
+```
+
+示例：
+
+```text
+私有 Registry：Basic authentication，用户名 admin，密钥为登录密码，匹配 registry.example.com
+GHCR：Bearer Token，用户名留空，密钥为 GitHub Personal Access Token，匹配 ghcr.io 或 GHCR 类别
+```
+
+测试镜像中的认证策略与凭证配置不同：
+
+- **匿名访问**：不要求凭证。
+- **可选认证**：有匹配凭证时使用，没有凭证时继续匿名探测。
+- **必须认证**：没有匹配凭证时直接判定认证失败。
+
+凭证密钥不会明文保存，使用 `CREDENTIAL_ENCRYPTION_KEY` 加密存储。生产环境必须设置随机的 32 字节加密密钥，并妥善备份。
+
 通知通道支持 Gotify、Webhook 和 SMTP Email。模板变量包括：
 
 ~~~text
