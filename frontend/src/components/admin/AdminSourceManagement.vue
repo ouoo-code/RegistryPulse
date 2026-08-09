@@ -66,7 +66,7 @@ const categoryProbeSummary = computed(() => {
   const tag = category?.default_test_tag || 'latest'
   const reference = image?.reference || `${repository}:${tag}`
   const size = bytesToMiB(image?.max_bytes || bytesPerMiB)
-  return `${reference} ${size} M/${probeModeLabel(category?.default_probe_mode)}/${category?.default_timeout_seconds || 15} s`
+  return [reference, `${size} M`, probeModeLabel(category?.default_probe_mode), `${category?.default_timeout_seconds || 15} s`].join(' | ')
 })
 const probeConfigLabel = computed(() => {
   const current = `${t.value.defaultProbeConfigIs}${categoryProbeSummary.value}`

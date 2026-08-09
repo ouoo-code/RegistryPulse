@@ -75,7 +75,12 @@ jobs:
           sed -i 's/^ADMIN_PASSWORD=.*/ADMIN_PASSWORD=ci-admin-password-123/' .env
           sed -i 's/^APP_ENV=.*/APP_ENV=development/' .env
       - name: Start Compose
-        run: docker compose up -d --build
+        run: |
+          if ! docker compose up -d --build; then
+            docker compose ps
+            docker compose logs --no-color api postgres redis nginx
+            exit 1
+          fi
       - name: Wait for HTTP health
         run: |
           for i in $(seq 1 60); do curl --fail --silent http://127.0.0.1/health && exit 0; sleep 2; done
