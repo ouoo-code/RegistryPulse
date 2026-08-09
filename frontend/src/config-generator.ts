@@ -25,16 +25,17 @@ function registryReference(url: string): string {
 }
 
 export function renderPodmanMirrors(urls: string[], categorySlug = 'dockerhub'): string {
-  const official = officialRegistries[categorySlug] || categorySlug || 'docker.io'
+  const categoryKey = categorySlug.trim().toLowerCase()
+  const official = officialRegistries[categoryKey] || categorySlug || 'docker.io'
   const mirrors = uniqueUrls(urls).map(url => '[[registry.mirror]]\nlocation = "' + registryReference(url) + '"\ninsecure = false').join('\n\n')
-  const search = categorySlug === 'dockerhub' ? 'unqualified-search-registries = ["docker.io"]\n\n' : ''
+  const search = categoryKey === 'dockerhub' ? 'unqualified-search-registries = ["docker.io"]\n\n' : ''
   return search + '[[registry]]\nprefix = "' + official + '"\nlocation = "' + official + '"\ninsecure = false\n\n' + mirrors + '\n'
 }
 export function renderContainerdMirrors(urls: string[]): string { return uniqueUrls(urls).map(url => { const host = new URL(url).host; return `server = "https://${host}"\n\n[host."${url.replace(/\/$/, '')}"]\n  capabilities = ["pull", "resolve"]\n  skip_verify = false` }).join('\n\n') + '\n' }
 export const renderNerdctlMirrors = renderContainerdMirrors
 
 export function renderRegistryPullCommands(urls: string[], categorySlug: string): string {
-  const official = officialRegistries[categorySlug] || '<official-registry>'
+  const official = officialRegistries[categorySlug.trim().toLowerCase()] || '<official-registry>'
   return uniqueUrls(urls).map(url => {
     const mirror = registryReference(url)
     return `# ${mirror}\ndocker pull ${mirror}/user/image:tag\ndocker tag ${mirror}/user/image:tag ${official}/user/image:tag`

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { api } from '../api'
 import { adminHeaders } from '../admin-api'
@@ -18,6 +18,7 @@ const token = ref(sessionStorage.getItem('admin-token') || '')
 const activeSection = ref('sources')
 const notice = ref('')
 const error = ref('')
+let feedbackTimer: number | undefined
 const sourceManagement = ref<{ refresh: () => Promise<void>; openCreate: () => void } | null>(null)
 const categoryManagement = ref<{ refresh: () => Promise<void> } | null>(null)
 const taskManagement = ref<{ refresh: () => Promise<void> } | null>(null)
@@ -36,7 +37,7 @@ async function signIn(credentials: { username: string; password: string; totp_co
     token.value = result.token
     sessionStorage.setItem('admin-token', result.token)
     error.value = ''
-  } catch { error.value = t.value.apiError }
+  } catch { handleError(t.value.apiError) }
 }
 
 async function signOut() {
@@ -45,10 +46,22 @@ async function signOut() {
 }
 
 async function changePassword(payload: { currentPassword: string; newPassword: string }) {
-  try { await api('/auth/change-password', { method: 'POST', headers: adminHeaders(token.value), body: JSON.stringify({ current_password: payload.currentPassword, new_password: payload.newPassword }) }); notice.value = t.value.savedPasswordHint; await signOut() } catch { error.value = t.value.apiError }
+  try { await api('/auth/change-password', { method: 'POST', headers: adminHeaders(token.value), body: JSON.stringify({ current_password: payload.currentPassword, new_password: payload.newPassword }) }); handleNotice(t.value.savedPasswordHint); await signOut() } catch { handleError(t.value.apiError) }
 }
 
-function setSection(section: string) { activeSection.value = section; notice.value = ''; error.value = '' }
+function clearFeedbackTimer() {
+  if (feedbackTimer !== undefined) window.clearTimeout(feedbackTimer)
+  feedbackTimer = undefined
+}
+function scheduleFeedbackClear() {
+  clearFeedbackTimer()
+  feedbackTimer = window.setTimeout(() => {
+    notice.value = ''
+    error.value = ''
+    feedbackTimer = undefined
+  }, 5000)
+}
+function setSection(section: string) { activeSection.value = section; notice.value = ''; error.value = ''; clearFeedbackTimer() }
 async function refreshActive() {
   if (activeSection.value === 'sources') await sourceManagement.value?.refresh()
   if (activeSection.value === 'categories') await categoryManagement.value?.refresh()
@@ -56,10 +69,11 @@ async function refreshActive() {
   if (activeSection.value === 'history') await historyManagement.value?.refresh()
   if (!['sources', 'categories', 'tasks', 'history'].includes(activeSection.value)) await miscSections.value?.refresh()
 }
-function handleError(message: string) { error.value = message }
-function handleNotice(message: string) { notice.value = message; error.value = '' }
+function handleError(message: string) { error.value = message; notice.value = ''; scheduleFeedbackClear() }
+function handleNotice(message: string) { notice.value = message; error.value = ''; scheduleFeedbackClear() }
 
 onMounted(() => { if (!token.value) sessionStorage.removeItem('admin-token') })
+onUnmounted(clearFeedbackTimer)
 </script>
 
 <template>

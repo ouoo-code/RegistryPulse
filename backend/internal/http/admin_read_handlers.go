@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/ouoo-code/RegistryPulse/internal/domain"
@@ -19,12 +20,21 @@ func (s *Server) results(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 405, "METHOD_NOT_ALLOWED", "method not allowed")
 		return
 	}
-	items := make([]any, 0)
+	items := make([]domain.ProbeResult, 0)
 	for _, source := range s.store.Sources() {
 		for _, result := range s.store.History(source.ID, 200) {
 			items = append(items, result)
 		}
 	}
+	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].CheckedAt.Equal(items[j].CheckedAt) {
+			if items[i].SourceID == items[j].SourceID {
+				return items[i].ID > items[j].ID
+			}
+			return items[i].SourceID < items[j].SourceID
+		}
+		return items[i].CheckedAt.After(items[j].CheckedAt)
+	})
 	writeData(w, items, map[string]any{"count": len(items)})
 }
 

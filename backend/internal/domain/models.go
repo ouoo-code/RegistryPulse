@@ -10,6 +10,10 @@ type Category struct {
 	Icon                  string    `json:"icon"`
 	OfficialURL           string    `json:"official_url"`
 	DefaultTestRepository string    `json:"default_test_repository"`
+	DefaultTestTag        string    `json:"default_test_tag"`
+	DefaultTestImageID    string    `json:"default_test_image_id,omitempty"`
+	DefaultProbeMode      string    `json:"default_probe_mode"`
+	DefaultTimeoutSeconds int       `json:"default_timeout_seconds"`
 	DefaultManifestPath   string    `json:"default_manifest_path"`
 	AuthType              string    `json:"auth_type"`
 	Enabled               bool      `json:"enabled"`
@@ -37,6 +41,7 @@ type Source struct {
 	Priority           int       `json:"priority"`
 	SortOrder          int       `json:"sort_order"`
 	Maintenance        bool      `json:"maintenance"`
+	ProbeConfigCustom  bool      `json:"probe_config_custom"`
 	ProbeMode          string    `json:"probe_mode"`
 	TestRepository     string    `json:"test_repository"`
 	TestTag            string    `json:"test_tag"`
@@ -187,6 +192,7 @@ type SourceInput struct {
 	Priority          *int     `json:"priority"`
 	SortOrder         *int     `json:"sort_order"`
 	Maintenance       *bool    `json:"maintenance"`
+	ProbeConfigCustom bool     `json:"probe_config_custom"`
 	ProbeMode         string   `json:"probe_mode"`
 	TestRepository    string   `json:"test_repository"`
 	TestTag           string   `json:"test_tag"`

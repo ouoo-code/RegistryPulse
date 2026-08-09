@@ -294,18 +294,31 @@ func (r *Runner) safeProbe(ctx context.Context, source domain.Source) (result pr
 		}
 	}()
 	for attempt := 0; attempt <= r.cfg.ProbeRetries; attempt++ {
-		if source.ProbeMode == "docker_pull" {
-			result = probe.RunDockerPull(ctx, r.cfg.ProbeTimeout, os.Getenv("PROBE_TEST_IMAGE"), envInt64("PROBE_PULL_MAX_BYTES", 64<<20))
-		} else {
-			timeout := r.cfg.ProbeTimeout
-			if source.RequestTimeout > 0 {
-				timeout = time.Duration(source.RequestTimeout) * time.Second
+		timeout := r.cfg.ProbeTimeout
+		if source.RequestTimeout > 0 {
+			timeout = time.Duration(source.RequestTimeout) * time.Second
+		}
+		switch source.ProbeMode {
+		case probe.ModeDockerPull:
+			image := source.TestImageReference
+			if image == "" && source.TestRepository != "" {
+				image = source.TestRepository
+				if source.TestTag != "" {
+					image += ":" + source.TestTag
+				}
 			}
-			if source.TestRepository != "" || source.TestTag != "" || source.DownloadTestBytes > 0 {
-				result = probe.RunWithOptions(ctx, source.BaseURL, timeout, probe.Options{TestRepository: source.TestRepository, TestTag: source.TestTag, DownloadTestBytes: source.DownloadTestBytes})
-			} else {
-				result = r.probe(ctx, source.BaseURL, timeout)
+			if image == "" {
+				image = os.Getenv("PROBE_TEST_IMAGE")
 			}
+			maxBytes := source.DownloadTestBytes
+			if maxBytes <= 0 {
+				maxBytes = envInt64("PROBE_PULL_MAX_BYTES", 64<<20)
+			}
+			result = probe.RunDockerPull(ctx, timeout, image, maxBytes)
+		case probe.ModeHTTP:
+			result = probe.RunHTTP(ctx, source.BaseURL, timeout)
+		default:
+			result = probe.RunWithOptions(ctx, source.BaseURL, timeout, probe.Options{TestRepository: source.TestRepository, TestTag: source.TestTag, DownloadTestBytes: source.DownloadTestBytes, SkipBlob: source.ProbeMode == probe.ModeManifest})
 		}
 		if result.Status == "online" || attempt == r.cfg.ProbeRetries {
 			return result

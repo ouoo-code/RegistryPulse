@@ -249,6 +249,14 @@ func (s *Server) category(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) sources(w http.ResponseWriter, r *http.Request) {
 	q, cat := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q"))), strings.TrimSpace(r.URL.Query().Get("category"))
+	if cat != "" {
+		// Public URLs may use either the stable category ID or its display slug.
+		// Resolve the latter before filtering sources, whose foreign key remains
+		// the stable ID by design.
+		if category, err := s.store.Category(cat); err == nil {
+			cat = category.ID
+		}
+	}
 	out := filterEnabledSources(filterSources(s.store.Sources(), q, cat))
 	status := strings.TrimSpace(r.URL.Query().Get("status"))
 	if status != "" {
@@ -328,6 +336,10 @@ func (s *Server) source(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 404, "SOURCE_NOT_FOUND", "source not found")
 		return
 	}
+	if err != nil {
+		writeError(w, 500, "INTERNAL_ERROR", "internal server error")
+		return
+	}
 	if len(parts) > 1 && parts[1] == "history" {
 		writeData(w, s.store.History(parts[0], 50), nil)
 		return
@@ -349,10 +361,6 @@ func (s *Server) source(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(parts) > 1 && parts[1] == "incidents" {
 		s.sourceIncidents(w, r, parts[0])
-		return
-	}
-	if err != nil {
-		writeError(w, 500, "INTERNAL_ERROR", "internal server error")
 		return
 	}
 	writeData(w, v, nil)
@@ -424,6 +432,89 @@ func (s *Server) adminSources(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) adminSource(w http.ResponseWriter, r *http.Request) {
 	restPath := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/v1/admin/sources/"), "/")
+	if restPath == "test" && r.Method == http.MethodPost {
+		user, ok := s.requirePermission(w, r, "probe.write")
+		if !ok {
+			return
+		}
+		var input struct {
+			BaseURL               string `json:"base_url"`
+			ProbeMode             string `json:"probe_mode"`
+			TestRepository        string `json:"test_repository"`
+			TestTag               string `json:"test_tag"`
+			TestImageReference    string `json:"test_image_reference"`
+			RequestTimeoutSeconds int    `json:"request_timeout_seconds"`
+			DownloadTestBytes     int64  `json:"download_test_bytes"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input); err != nil {
+			writeError(w, http.StatusBadRequest, "INVALID_JSON", "invalid request body")
+			return
+		}
+		input.BaseURL = strings.TrimSpace(input.BaseURL)
+		if input.BaseURL == "" {
+			writeError(w, http.StatusBadRequest, "INVALID_SOURCE_URL", "base_url is required")
+			return
+		}
+		if err := validateSourceInput(domain.SourceInput{BaseURL: input.BaseURL}); err != nil {
+			writeError(w, http.StatusBadRequest, "INVALID_SOURCE_URL", err.Error())
+			return
+		}
+		mode := strings.TrimSpace(input.ProbeMode)
+		if mode == "" {
+			mode = probe.ModeRegistry
+		}
+		if !supportedProbeMode(mode) {
+			writeError(w, http.StatusBadRequest, "INVALID_PROBE_MODE", "unsupported probe mode")
+			return
+		}
+		timeoutSeconds := input.RequestTimeoutSeconds
+		if timeoutSeconds <= 0 {
+			timeoutSeconds = 15
+		}
+		if timeoutSeconds > 300 {
+			writeError(w, http.StatusBadRequest, "INVALID_TIMEOUT", "request_timeout_seconds must be between 1 and 300")
+			return
+		}
+		repository := strings.TrimSpace(input.TestRepository)
+		tag := strings.TrimSpace(input.TestTag)
+		if input.TestImageReference != "" {
+			defaultRepository, defaultTag := splitProbeImageReference(input.TestImageReference)
+			if repository == "" {
+				repository = defaultRepository
+			}
+			if tag == "" {
+				tag = defaultTag
+			}
+		}
+		if repository == "" {
+			repository = "library/alpine"
+		}
+		if tag == "" {
+			tag = "latest"
+		}
+		var result probe.Result
+		timeout := time.Duration(timeoutSeconds) * time.Second
+		switch mode {
+		case probe.ModeDockerPull:
+			image := strings.TrimSpace(input.TestImageReference)
+			if image == "" {
+				image = repository + ":" + tag
+			}
+			result = probe.RunDockerPull(r.Context(), timeout, image, input.DownloadTestBytes)
+		case probe.ModeHTTP:
+			result = probe.RunHTTP(r.Context(), input.BaseURL, timeout)
+		default:
+			result = probe.RunWithOptions(r.Context(), input.BaseURL, timeout, probe.Options{
+				TestRepository:    repository,
+				TestTag:           tag,
+				DownloadTestBytes: input.DownloadTestBytes,
+				SkipBlob:          mode == probe.ModeManifest,
+			})
+		}
+		s.audit(r, user, "source.probe_test", input.BaseURL, map[string]any{"probe_mode": mode, "test_repository": repository, "test_tag": tag})
+		writeData(w, result, nil)
+		return
+	}
 	if restPath == "batch" && r.Method == http.MethodPost {
 		user, ok := s.requirePermission(w, r, "source.write")
 		if !ok {
@@ -477,7 +568,7 @@ func (s *Server) adminSource(w http.ResponseWriter, r *http.Request) {
 				value := source.TestImageID
 				testImageID = &value
 			}
-			_, err = s.store.UpsertSource(domain.SourceInput{Name: source.Name, BaseURL: source.BaseURL, DisplayURL: source.DisplayURL, CategoryID: categoryID, Description: source.Description, Provider: source.Provider, Country: source.Country, Region: source.Region, Operator: source.Operator, Tags: source.Tags, Enabled: &enabled, IsOfficial: &isOfficial, IsCloudflare: &source.IsCloudflare, IsRecommended: &isRecommended, Priority: &source.Priority, SortOrder: &source.SortOrder, TestRepository: source.TestRepository, TestTag: source.TestTag, TestDigest: source.TestDigest, RequestTimeout: &source.RequestTimeout, DownloadTestBytes: &source.DownloadTestBytes, TestImageID: testImageID, Maintenance: &maintenance, ProbeMode: source.ProbeMode}, id)
+			_, err = s.store.UpsertSource(domain.SourceInput{Name: source.Name, BaseURL: source.BaseURL, DisplayURL: source.DisplayURL, CategoryID: categoryID, Description: source.Description, Provider: source.Provider, Country: source.Country, Region: source.Region, Operator: source.Operator, Tags: source.Tags, Enabled: &enabled, IsOfficial: &isOfficial, IsCloudflare: &source.IsCloudflare, IsRecommended: &isRecommended, Priority: &source.Priority, SortOrder: &source.SortOrder, TestRepository: source.TestRepository, TestTag: source.TestTag, TestDigest: source.TestDigest, RequestTimeout: &source.RequestTimeout, DownloadTestBytes: &source.DownloadTestBytes, TestImageID: testImageID, Maintenance: &maintenance, ProbeConfigCustom: source.ProbeConfigCustom, ProbeMode: source.ProbeMode}, id)
 			if err == nil {
 				updated++
 			}
@@ -711,6 +802,25 @@ func validateSourceInput(in domain.SourceInput) error {
 	}
 	return nil
 }
+
+func supportedProbeMode(mode string) bool {
+	for _, supported := range probe.SupportedModes() {
+		if mode == supported {
+			return true
+		}
+	}
+	return false
+}
+
+func splitProbeImageReference(reference string) (string, string) {
+	value := strings.TrimSpace(reference)
+	separator := strings.LastIndex(value, ":")
+	if separator > strings.LastIndex(value, "/") {
+		return value[:separator], value[separator+1:]
+	}
+	return value, "latest"
+}
+
 func (s *Server) authorized(r *http.Request) bool {
 	if s.adminToken != "" && strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")) == s.adminToken {
 		return true

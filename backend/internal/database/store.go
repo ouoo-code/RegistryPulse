@@ -22,7 +22,7 @@ func (s *Store) DBHandle() *sql.DB {
 var _ domain.Store = (*Store)(nil)
 
 func (s *Store) Categories() []domain.Category {
-	rows, err := s.DB.Query(`SELECT id,slug,name,description,icon,official_url,default_test_repository,default_manifest_path,auth_type,enabled,sort_order,created_at FROM registry_categories ORDER BY sort_order,name`)
+	rows, err := s.DB.Query(`SELECT id,slug,name,description,icon,official_url,default_test_repository,default_test_tag,COALESCE(default_test_image_id::text,''),default_probe_mode,default_timeout_seconds,default_manifest_path,auth_type,enabled,sort_order,created_at FROM registry_categories ORDER BY sort_order,name`)
 	if err != nil {
 		return nil
 	}
@@ -30,7 +30,7 @@ func (s *Store) Categories() []domain.Category {
 	out := []domain.Category{}
 	for rows.Next() {
 		var v domain.Category
-		if rows.Scan(&v.ID, &v.Slug, &v.Name, &v.Description, &v.Icon, &v.OfficialURL, &v.DefaultTestRepository, &v.DefaultManifestPath, &v.AuthType, &v.Enabled, &v.SortOrder, &v.CreatedAt) == nil {
+		if rows.Scan(&v.ID, &v.Slug, &v.Name, &v.Description, &v.Icon, &v.OfficialURL, &v.DefaultTestRepository, &v.DefaultTestTag, &v.DefaultTestImageID, &v.DefaultProbeMode, &v.DefaultTimeoutSeconds, &v.DefaultManifestPath, &v.AuthType, &v.Enabled, &v.SortOrder, &v.CreatedAt) == nil {
 			out = append(out, v)
 		}
 	}
@@ -38,7 +38,7 @@ func (s *Store) Categories() []domain.Category {
 }
 func (s *Store) Category(slug string) (domain.Category, error) {
 	var v domain.Category
-	err := s.DB.QueryRow(`SELECT id,slug,name,description,icon,official_url,default_test_repository,default_manifest_path,auth_type,enabled,sort_order,created_at FROM registry_categories WHERE slug=$1 OR id=$1`, slug).Scan(&v.ID, &v.Slug, &v.Name, &v.Description, &v.Icon, &v.OfficialURL, &v.DefaultTestRepository, &v.DefaultManifestPath, &v.AuthType, &v.Enabled, &v.SortOrder, &v.CreatedAt)
+	err := s.DB.QueryRow(`SELECT id,slug,name,description,icon,official_url,default_test_repository,default_test_tag,COALESCE(default_test_image_id::text,''),default_probe_mode,default_timeout_seconds,default_manifest_path,auth_type,enabled,sort_order,created_at FROM registry_categories WHERE lower(slug)=lower($1) OR id=$1`, slug).Scan(&v.ID, &v.Slug, &v.Name, &v.Description, &v.Icon, &v.OfficialURL, &v.DefaultTestRepository, &v.DefaultTestTag, &v.DefaultTestImageID, &v.DefaultProbeMode, &v.DefaultTimeoutSeconds, &v.DefaultManifestPath, &v.AuthType, &v.Enabled, &v.SortOrder, &v.CreatedAt)
 	if err == sql.ErrNoRows {
 		return v, domain.ErrNotFound
 	}
@@ -62,7 +62,7 @@ func (s *Store) Sources() []domain.Source {
 	return out
 }
 func (s *Store) Source(id string) (domain.Source, error) {
-	v, err := scanSource(s.DB.QueryRow(sourceSelect+` WHERE id=$1`, id))
+	v, err := scanSource(s.DB.QueryRow(sourceSelect+` WHERE rs.id=$1`, id))
 	if err == sql.ErrNoRows {
 		return v, domain.ErrNotFound
 	}
@@ -119,6 +119,7 @@ func (s *Store) UpsertSource(in domain.SourceInput, id string) (domain.Source, e
 		sortOrder = *in.SortOrder
 	}
 	requestTimeout, downloadBytes := 10, int64(2<<20)
+	probeConfigCustom := in.ProbeConfigCustom
 	if in.RequestTimeout != nil {
 		requestTimeout = *in.RequestTimeout
 	}
@@ -149,6 +150,18 @@ func (s *Store) UpsertSource(in domain.SourceInput, id string) (domain.Source, e
 	tags, _ := json.Marshal(in.Tags)
 	now := time.Now().UTC()
 	if id == "" {
+		// Imports do not carry database UUIDs. Reconcile by the stable source
+		// identity so rerunning seed/registry-sources.example.json updates the
+		// existing catalog instead of creating duplicate rows.
+		lookupErr := s.DB.QueryRow(`SELECT id::text FROM registry_sources WHERE category_id=$1 AND name=$2 AND base_url=$3 ORDER BY id LIMIT 1`, in.CategoryID, in.Name, in.BaseURL).Scan(&id)
+		if lookupErr != nil && lookupErr != sql.ErrNoRows {
+			return domain.Source{}, lookupErr
+		}
+		if lookupErr == sql.ErrNoRows {
+			id = ""
+		}
+	}
+	if id == "" {
 		maintenance := false
 		if in.Maintenance != nil {
 			maintenance = *in.Maintenance
@@ -157,7 +170,7 @@ func (s *Store) UpsertSource(in domain.SourceInput, id string) (domain.Source, e
 		if mode == "" {
 			mode = "registry"
 		}
-		err := s.DB.QueryRow(`INSERT INTO registry_sources(category_id,name,base_url,display_url,registry_host,description,provider,country,region,operator,tags,is_official,is_cloudflare,is_recommended,is_enabled,priority,sort_order,maintenance,probe_mode,test_repository,test_tag,test_digest,request_timeout_seconds,download_test_bytes,test_image_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25) RETURNING id::text`, in.CategoryID, in.Name, in.BaseURL, displayURL, host(in.BaseURL), in.Description, in.Provider, in.Country, in.Region, in.Operator, tags, isOfficial, isCloudflare, isRecommended, enabled, priority, sortOrder, maintenance, mode, testRepository, testTag, in.TestDigest, requestTimeout, downloadBytes, testImageID).Scan(&id)
+		err := s.DB.QueryRow(`INSERT INTO registry_sources(category_id,name,base_url,display_url,registry_host,description,provider,country,region,operator,tags,is_official,is_cloudflare,is_recommended,is_enabled,priority,sort_order,maintenance,probe_config_custom,probe_mode,test_repository,test_tag,test_digest,request_timeout_seconds,download_test_bytes,test_image_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26) RETURNING id::text`, in.CategoryID, in.Name, in.BaseURL, displayURL, host(in.BaseURL), in.Description, in.Provider, in.Country, in.Region, in.Operator, tags, isOfficial, isCloudflare, isRecommended, enabled, priority, sortOrder, maintenance, probeConfigCustom, mode, testRepository, testTag, in.TestDigest, requestTimeout, downloadBytes, testImageID).Scan(&id)
 		if err != nil {
 			return domain.Source{}, err
 		}
@@ -170,7 +183,7 @@ func (s *Store) UpsertSource(in domain.SourceInput, id string) (domain.Source, e
 		if mode == "" {
 			mode = "registry"
 		}
-		res, err := s.DB.Exec(`UPDATE registry_sources SET category_id=$1,name=$2,base_url=$3,display_url=$4,registry_host=$5,description=$6,provider=$7,country=$8,region=$9,operator=$10,tags=$11,is_official=$12,is_cloudflare=$13,is_recommended=$14,is_enabled=$15,priority=$16,sort_order=$17,maintenance=$18,status=CASE WHEN $18 THEN 'maintenance' WHEN status='maintenance' THEN 'unknown' ELSE status END,probe_mode=$19,test_repository=$20,test_tag=$21,test_digest=$22,request_timeout_seconds=$23,download_test_bytes=$24,test_image_id=$25,updated_at=now() WHERE id=$26`, in.CategoryID, in.Name, in.BaseURL, displayURL, host(in.BaseURL), in.Description, in.Provider, in.Country, in.Region, in.Operator, tags, isOfficial, isCloudflare, isRecommended, enabled, priority, sortOrder, maintenance, mode, testRepository, testTag, in.TestDigest, requestTimeout, downloadBytes, testImageID, id)
+		res, err := s.DB.Exec(`UPDATE registry_sources SET category_id=$1,name=$2,base_url=$3,display_url=$4,registry_host=$5,description=$6,provider=$7,country=$8,region=$9,operator=$10,tags=$11,is_official=$12,is_cloudflare=$13,is_recommended=$14,is_enabled=$15,priority=$16,sort_order=$17,maintenance=$18,status=CASE WHEN $18 THEN 'maintenance' WHEN status='maintenance' THEN 'unknown' ELSE status END,probe_config_custom=$19,probe_mode=$20,test_repository=$21,test_tag=$22,test_digest=$23,request_timeout_seconds=$24,download_test_bytes=$25,test_image_id=$26,updated_at=now() WHERE id=$27`, in.CategoryID, in.Name, in.BaseURL, displayURL, host(in.BaseURL), in.Description, in.Provider, in.Country, in.Region, in.Operator, tags, isOfficial, isCloudflare, isRecommended, enabled, priority, sortOrder, maintenance, probeConfigCustom, mode, testRepository, testTag, in.TestDigest, requestTimeout, downloadBytes, testImageID, id)
 		if err != nil {
 			return domain.Source{}, err
 		}
@@ -207,7 +220,7 @@ func (s *Store) DeleteSource(id string) error {
 	return tx.Commit()
 }
 
-const sourceSelect = `SELECT id::text,category_id,name,base_url,COALESCE(display_url,base_url),registry_host,description,provider,country,region,operator,tags,is_official,is_cloudflare,is_recommended,is_enabled,priority,sort_order,maintenance,probe_mode,test_repository,test_tag,test_digest,request_timeout_seconds,download_test_bytes,status,response_ms,last_checked,error,created_at,updated_at,COALESCE(test_image.image_id::text,''),COALESCE(test_image.reference,''),COALESCE(test_image.max_bytes,0) FROM registry_sources LEFT JOIN LATERAL (SELECT id AS image_id,reference,max_bytes,0 AS selection_priority FROM test_images WHERE id=registry_sources.test_image_id AND enabled UNION ALL SELECT id AS image_id,reference,max_bytes,1 AS selection_priority FROM test_images WHERE is_default AND enabled ORDER BY selection_priority,image_id LIMIT 1) AS test_image ON true`
+const sourceSelect = `SELECT rs.id::text,rs.category_id,rs.name,rs.base_url,COALESCE(rs.display_url,rs.base_url),rs.registry_host,rs.description,rs.provider,rs.country,rs.region,rs.operator,rs.tags,rs.is_official,rs.is_cloudflare,rs.is_recommended,rs.is_enabled,rs.priority,rs.sort_order,rs.maintenance,rs.probe_config_custom,CASE WHEN rs.probe_config_custom THEN rs.probe_mode ELSE COALESCE(NULLIF(c.default_probe_mode,''),'registry') END,CASE WHEN rs.probe_config_custom THEN rs.test_repository ELSE COALESCE(NULLIF(c.default_test_repository,''),'library/alpine') END,CASE WHEN rs.probe_config_custom THEN rs.test_tag ELSE COALESCE(NULLIF(c.default_test_tag,''),'latest') END,rs.test_digest,CASE WHEN rs.probe_config_custom THEN rs.request_timeout_seconds ELSE COALESCE(NULLIF(c.default_timeout_seconds,0),15) END,rs.download_test_bytes,rs.status,rs.response_ms,rs.last_checked,rs.error,rs.created_at,rs.updated_at,COALESCE(test_image.image_id::text,''),COALESCE(test_image.reference,''),COALESCE(test_image.max_bytes,0) FROM registry_sources rs JOIN registry_categories c ON c.id=rs.category_id LEFT JOIN LATERAL (SELECT id AS image_id,reference,max_bytes,0 AS selection_priority FROM test_images WHERE rs.probe_config_custom AND id=rs.test_image_id AND enabled UNION ALL SELECT id AS image_id,reference,max_bytes,1 AS selection_priority FROM test_images WHERE NOT rs.probe_config_custom AND id=c.default_test_image_id AND enabled UNION ALL SELECT id AS image_id,reference,max_bytes,2 AS selection_priority FROM test_images WHERE is_default AND enabled ORDER BY selection_priority,image_id LIMIT 1) AS test_image ON true`
 
 type scanner interface{ Scan(...any) error }
 
@@ -216,7 +229,7 @@ func scanSource(row scanner) (domain.Source, error) {
 	var raw []byte
 	var lastChecked sql.NullTime
 	var testImageID sql.NullString
-	err := row.Scan(&v.ID, &v.CategoryID, &v.Name, &v.BaseURL, &v.DisplayURL, &v.RegistryHost, &v.Description, &v.Provider, &v.Country, &v.Region, &v.Operator, &raw, &v.IsOfficial, &v.IsCloudflare, &v.IsRecommended, &v.Enabled, &v.Priority, &v.SortOrder, &v.Maintenance, &v.ProbeMode, &v.TestRepository, &v.TestTag, &v.TestDigest, &v.RequestTimeout, &v.DownloadTestBytes, &v.Status, &v.ResponseMS, &lastChecked, &v.Error, &v.CreatedAt, &v.UpdatedAt, &testImageID, &v.TestImageReference, &v.TestImageMaxBytes)
+	err := row.Scan(&v.ID, &v.CategoryID, &v.Name, &v.BaseURL, &v.DisplayURL, &v.RegistryHost, &v.Description, &v.Provider, &v.Country, &v.Region, &v.Operator, &raw, &v.IsOfficial, &v.IsCloudflare, &v.IsRecommended, &v.Enabled, &v.Priority, &v.SortOrder, &v.Maintenance, &v.ProbeConfigCustom, &v.ProbeMode, &v.TestRepository, &v.TestTag, &v.TestDigest, &v.RequestTimeout, &v.DownloadTestBytes, &v.Status, &v.ResponseMS, &lastChecked, &v.Error, &v.CreatedAt, &v.UpdatedAt, &testImageID, &v.TestImageReference, &v.TestImageMaxBytes)
 	if err != nil {
 		return v, err
 	}

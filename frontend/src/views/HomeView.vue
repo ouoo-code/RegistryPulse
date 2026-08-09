@@ -26,6 +26,16 @@ const lastUpdated = ref('')
 const selectedIds = ref<string[]>([])
 const configOpen = ref(false)
 let refreshTimer: ReturnType<typeof setInterval> | undefined
+let errorTimer: number | undefined
+
+function showError(message: string) {
+  if (errorTimer !== undefined) window.clearTimeout(errorTimer)
+  error.value = message
+  errorTimer = window.setTimeout(() => {
+    error.value = ''
+    errorTimer = undefined
+  }, 5000)
+}
 
 const filtered = computed(() => [...sources.value
   .filter(source => {
@@ -75,7 +85,7 @@ async function load() {
     sources.value = list
     lastUpdated.value = formatDateTime(summary.last_updated) || formatDateTime(new Date().toISOString())
   } catch {
-    error.value = t.value.apiError
+    showError(t.value.apiError)
   } finally {
     loading.value = false
   }
@@ -88,6 +98,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (refreshTimer) clearInterval(refreshTimer)
+  if (errorTimer !== undefined) window.clearTimeout(errorTimer)
 })
 </script>
 

@@ -11,12 +11,12 @@ const emit = defineEmits<{ close: []; clear: [] }>()
 const { t } = useI18n()
 const format = ref<Runtime>('docker')
 const copied = ref(false)
-const isDockerHub = computed(() => props.category?.slug === 'dockerhub')
+const isDockerHub = computed(() => props.category?.id === 'dockerhub')
 const mirrors = computed(() => props.sources.map(source => source.base_url).join('\n'))
 const output = computed(() => {
   const urls = mirrors.value.split(/\r?\n|,/).map(value => value.trim()).filter(Boolean)
-  if (!isDockerHub.value && format.value === 'podman') return renderPodmanMirrors(urls, props.category?.slug || 'custom')
-  if (!isDockerHub.value) return renderRegistryPullCommands(urls, props.category?.slug || 'custom')
+  if (!isDockerHub.value && format.value === 'podman') return renderPodmanMirrors(urls, props.category?.id || 'custom')
+  if (!isDockerHub.value) return renderRegistryPullCommands(urls, props.category?.id || 'custom')
   if (format.value === 'docker') return renderDockerMirrors(urls)
   if (format.value === '1panel') return renderOnePanelMirrors(urls)
   if (format.value === 'podman') return renderPodmanMirrors(urls)
@@ -24,7 +24,7 @@ const output = computed(() => {
   return renderContainerdMirrors(urls)
 })
 
-watch(() => [props.open, props.category?.slug], () => {
+watch(() => [props.open, props.category?.id], () => {
   format.value = isDockerHub.value ? 'docker' : 'commands'
 })
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { adminApi, adminRequest, exportSources, importSources } from '../../admin-api'
 import { type Category, type Source, type SourceInput, type TestImage } from '../../api'
 import { statusLabel, useI18n } from '../../i18n'
@@ -23,6 +23,10 @@ const tagText = ref('')
 const page = ref(1)
 const pageSize = ref(25)
 const loading = ref(false)
+const testingConfig = ref(false)
+type ProbeTestFeedback = { tone: 'running' | 'success' | 'error'; message: string }
+const testFeedback = ref<ProbeTestFeedback | null>(null)
+let testFeedbackTimer: number | undefined
 const categoryFilter = ref('')
 const query = ref('')
 const statusFilter = ref('')
@@ -44,8 +48,31 @@ function bytesToMiB(bytes: number) {
   return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')
 }
 
-const emptyForm = (): SourceInput => ({ name: '', base_url: '', category_id: '', provider: '', region: '', tags: [], enabled: true, maintenance: false, probe_mode: 'registry', description: '', country: '', operator: '', test_image_id: '', request_timeout_seconds: 10 })
+const emptyForm = (): SourceInput => ({ name: '', base_url: '', category_id: '', provider: '', region: '', tags: [], enabled: true, maintenance: false, probe_config_custom: false, probe_mode: 'registry', description: '', country: '', operator: '', test_image_id: '', request_timeout_seconds: 15 })
 const form = ref<SourceInput>(emptyForm())
+const categoryConfig = computed(() => categories.value.find(category => category.id === form.value.category_id))
+const categoryDefaultTestImage = computed(() => {
+  const category = categoryConfig.value
+  if (category?.default_test_image_id) {
+    const configuredImage = testImages.value.find(image => image.id === category.default_test_image_id && image.enabled)
+    if (configuredImage) return configuredImage
+  }
+  return testImages.value.find(image => image.is_default && image.enabled)
+})
+const categoryProbeSummary = computed(() => {
+  const category = categoryConfig.value
+  const image = categoryDefaultTestImage.value
+  const repository = category?.default_test_repository || 'library/alpine'
+  const tag = category?.default_test_tag || 'latest'
+  const reference = image?.reference || `${repository}:${tag}`
+  const size = bytesToMiB(image?.max_bytes || bytesPerMiB)
+  return `${reference} ${size} M/${probeModeLabel(category?.default_probe_mode)}/${category?.default_timeout_seconds || 15} s`
+})
+const probeConfigLabel = computed(() => {
+  const current = `${t.value.defaultProbeConfigIs}${categoryProbeSummary.value}`
+  const label = locale.value === 'zh' ? '自定义探测配置' : t.value.customProbeConfig
+  return locale.value === 'zh' ? `${label}（${current}）` : `${label} (${current})`
+})
 const pageCount = computed(() => Math.max(1, Math.ceil(filteredSources.value.length / pageSize.value)))
 const filteredSources = computed(() => sources.value.filter(source => {
   const text = `${source.name} ${source.base_url} ${source.provider || ''}`.toLowerCase()
@@ -93,17 +120,122 @@ function openCreate() {
   editing.value = null
   form.value = emptyForm()
   tagText.value = ''
+  testFeedback.value = null
   editorOpen.value = true
+}
+
+function applyCategoryDefaults() {
+  const category = categoryConfig.value
+  if (!category || form.value.probe_config_custom) return
+  form.value.probe_mode = category.default_probe_mode || 'registry'
+  form.value.request_timeout_seconds = category.default_timeout_seconds || 15
+  form.value.test_image_id = category.default_test_image_id || ''
+}
+
+function toggleProbeConfig() {
+  if (!form.value.probe_config_custom) applyCategoryDefaults()
+}
+
+function splitImageReference(reference: string) {
+  const value = reference.trim()
+  const separator = value.lastIndexOf(':')
+  if (separator > value.lastIndexOf('/')) return { repository: value.slice(0, separator), tag: value.slice(separator + 1) }
+  return { repository: value, tag: 'latest' }
+}
+
+function effectiveTestImage() {
+  if (form.value.probe_config_custom && form.value.test_image_id) {
+    return testImages.value.find(image => image.id === form.value.test_image_id && image.enabled)
+  }
+  return form.value.probe_config_custom
+    ? testImages.value.find(image => image.is_default && image.enabled) || categoryDefaultTestImage.value
+    : categoryDefaultTestImage.value
+}
+
+const testButtonLabel = computed(() => locale.value === 'zh'
+  ? (form.value.probe_config_custom ? '测试自定义' : '测试默认配置')
+  : (form.value.probe_config_custom ? 'Test custom' : 'Test default'))
+const testRunningLabel = computed(() => locale.value === 'zh' ? '测试中…' : 'Testing…')
+const testProbeSuccessLabel = computed(() => locale.value === 'zh' ? '探测配置测试成功' : 'Probe configuration test succeeded')
+const testProbeFailedLabel = computed(() => locale.value === 'zh' ? '探测配置测试失败' : 'Probe configuration test failed')
+const testProbeErrorLabel = computed(() => locale.value === 'zh' ? '无法测试探测配置' : 'Unable to test probe configuration')
+const testProbeMissingUrlLabel = computed(() => locale.value === 'zh' ? '请先填写地址' : 'Enter a URL first')
+
+function showTestFeedback(feedback: ProbeTestFeedback) {
+  if (testFeedbackTimer !== undefined) window.clearTimeout(testFeedbackTimer)
+  testFeedback.value = feedback
+  if (feedback.tone !== 'running') {
+    testFeedbackTimer = window.setTimeout(() => {
+      testFeedback.value = null
+      testFeedbackTimer = undefined
+    }, 5000)
+  }
+}
+
+async function testConfiguration() {
+  if (testingConfig.value) return
+  if (!form.value.base_url.trim()) {
+    showTestFeedback({ tone: 'error', message: testProbeMissingUrlLabel.value })
+    emit('error', testProbeMissingUrlLabel.value)
+    return
+  }
+  if (!form.value.probe_config_custom) applyCategoryDefaults()
+  const category = categoryConfig.value
+  const image = effectiveTestImage()
+  const imageParts = image?.reference ? splitImageReference(image.reference) : {
+    repository: category?.default_test_repository || 'library/alpine',
+    tag: category?.default_test_tag || 'latest',
+  }
+  const probeMode = form.value.probe_config_custom ? (form.value.probe_mode || 'registry') : (category?.default_probe_mode || 'registry')
+  const timeout = form.value.probe_config_custom ? (form.value.request_timeout_seconds || 15) : (category?.default_timeout_seconds || 15)
+  testingConfig.value = true
+  showTestFeedback({ tone: 'running', message: testRunningLabel.value })
+  try {
+    const result = await adminApi.testSource(props.token, {
+      base_url: form.value.base_url,
+      probe_mode: probeMode,
+      request_timeout_seconds: timeout,
+      test_repository: imageParts.repository,
+      test_tag: imageParts.tag,
+      test_image_reference: image?.reference,
+      download_test_bytes: image?.max_bytes,
+    })
+    if (result.status === 'online' || result.status === 'degraded') {
+      const message = `${testProbeSuccessLabel.value} · ${statusLabel(result.status, t.value)}`
+      showTestFeedback({ tone: 'success', message })
+      emit('notice', message)
+    } else {
+      const detail = [result.error_stage, result.error].filter(Boolean).join(' · ') || t.value.unknown
+      const message = `${testProbeFailedLabel.value}: ${detail}`
+      showTestFeedback({ tone: 'error', message })
+      emit('error', message)
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : testProbeErrorLabel.value
+    showTestFeedback({ tone: 'error', message })
+    emit('error', message)
+  } finally {
+    testingConfig.value = false
+  }
+}
+
+function probeModeLabel(mode: string | undefined) {
+  if (mode === 'manifest') return t.value.manifestProbe
+  if (mode === 'http') return t.value.httpProbe
+  if (mode === 'docker_pull') return t.value.dockerPullProbe
+  return t.value.registryProbe
 }
 
 function openEdit(source: Source) {
   editing.value = source
-  form.value = { name: source.name, base_url: source.base_url, category_id: source.category_id, provider: source.provider, region: source.region, tags: source.tags, enabled: source.enabled !== false, maintenance: source.maintenance, probe_mode: source.probe_mode || 'registry', description: source.description, country: source.country, operator: source.operator, is_official: source.is_official, is_cloudflare: source.is_cloudflare, is_recommended: source.is_recommended, priority: source.priority, sort_order: source.sort_order, test_image_id: source.test_image_id || '', request_timeout_seconds: source.request_timeout_seconds }
+  testFeedback.value = null
+  form.value = { name: source.name, base_url: source.base_url, category_id: source.category_id, provider: source.provider, region: source.region, tags: source.tags, enabled: source.enabled !== false, maintenance: source.maintenance, probe_config_custom: source.probe_config_custom === true, probe_mode: source.probe_mode || 'registry', description: source.description, country: source.country, operator: source.operator, is_official: source.is_official, is_cloudflare: source.is_cloudflare, is_recommended: source.is_recommended, priority: source.priority, sort_order: source.sort_order, test_image_id: source.test_image_id || '', request_timeout_seconds: source.request_timeout_seconds }
+  if (!form.value.probe_config_custom) applyCategoryDefaults()
   tagText.value = source.tags.join(', ')
   editorOpen.value = true
 }
 
-function closeEditor() { editorOpen.value = false; editing.value = null }
+function closeEditor() { editorOpen.value = false; editing.value = null; testFeedback.value = null }
 
 async function save() {
   try {
@@ -203,6 +335,9 @@ async function importFile(event: Event) {
 }
 
 onMounted(refresh)
+onUnmounted(() => {
+  if (testFeedbackTimer !== undefined) window.clearTimeout(testFeedbackTimer)
+})
 defineExpose({ refresh, openCreate })
 </script>
 
@@ -241,14 +376,15 @@ defineExpose({ refresh, openCreate })
     <form class="admin-editor-form" @submit.prevent="save">
       <FormField :label="t.name"><input v-model="form.name" required></FormField>
       <FormField :label="t.url"><input v-model="form.base_url" type="url" required></FormField>
-      <FormField :label="t.category"><select v-model="form.category_id" required><option value="" disabled>{{ t.category }}</option><option v-for="category in categories" :key="category.id" :value="category.id">{{ category.slug }} · {{ category.name }}</option></select></FormField>
+      <FormField :label="t.category"><select v-model="form.category_id" required @change="applyCategoryDefaults"><option value="" disabled>{{ t.category }}</option><option v-for="category in categories" :key="category.id" :value="category.id">{{ category.slug }} · {{ category.name }}</option></select></FormField>
       <FormField :label="t.provider"><input v-model="form.provider"></FormField>
       <FormField :label="t.region"><input v-model="form.region"></FormField>
       <FormField :label="t.tags"><input v-model="tagText" placeholder="official, cn"></FormField>
       <FormField class="form-field-description" :label="t.description"><textarea v-model="form.description" rows="1"></textarea></FormField>
-      <FormField class="form-field-test-image" :label="t.testImage"><select v-model="form.test_image_id"><option value="">{{ t.systemDefaultTestImage }}</option><option v-for="image in testImages.filter(item => item.enabled)" :key="image.id" :value="image.id">{{ image.reference }} · {{ bytesToMiB(image.max_bytes) }} M</option></select></FormField>
-      <FormField class="form-field-probe-mode" :label="t.probeMode"><select v-model="form.probe_mode"><option value="registry">{{ t.registryProbe }}</option><option value="docker_pull">{{ t.dockerPullProbe }}</option></select></FormField>
-      <FormField class="form-field-timeout" :label="t.timeout"><input v-model.number="form.request_timeout_seconds" type="number" min="1" max="300"></FormField>
+      <div class="checkbox-field probe-config-toggle"><input id="source-probe-config-custom" v-model="form.probe_config_custom" type="checkbox" @change="toggleProbeConfig"><label class="probe-config-toggle-label" for="source-probe-config-custom">{{ probeConfigLabel }}</label><span v-if="testFeedback" class="probe-test-feedback" :class="`is-${testFeedback.tone}`" role="status" aria-live="polite">{{ testFeedback.message }}</span><button class="icon-button probe-test-button" type="button" :disabled="testingConfig" :aria-busy="testingConfig" @click="testConfiguration">{{ testingConfig ? testRunningLabel : testButtonLabel }}</button></div>
+      <FormField class="form-field-test-image" :label="t.testImage"><select v-model="form.test_image_id" :disabled="!form.probe_config_custom"><option value="">{{ t.systemDefaultTestImage }}</option><option v-for="image in testImages.filter(item => item.enabled)" :key="image.id" :value="image.id">{{ image.reference }} · {{ bytesToMiB(image.max_bytes) }} M</option></select></FormField>
+      <FormField class="form-field-probe-mode" :label="t.probeMode"><select v-model="form.probe_mode" :disabled="!form.probe_config_custom"><option value="registry">{{ t.registryProbe }}</option><option value="manifest">{{ t.manifestProbe }}</option><option value="http">{{ t.httpProbe }}</option><option value="docker_pull">{{ t.dockerPullProbe }}</option></select></FormField>
+      <FormField class="form-field-timeout" :label="t.timeout"><input v-model.number="form.request_timeout_seconds" :readonly="!form.probe_config_custom" type="number" min="1" max="300"></FormField>
       <div class="editor-checks"><label class="checkbox-field"><input v-model="form.enabled" type="checkbox"><span>{{ t.enabled }}</span></label><label class="checkbox-field"><input v-model="form.is_official" type="checkbox"><span>{{ t.official }}</span></label><label class="checkbox-field"><input v-model="form.is_recommended" type="checkbox"><span>{{ t.recommended }}</span></label><label class="checkbox-field"><input v-model="form.maintenance" type="checkbox"><span>{{ t.maintenance }}</span></label></div>
       <div class="editor-form-actions"><button class="refresh" type="submit">{{ t.save }}</button><button class="icon-button" type="button" @click="closeEditor">{{ t.cancel }}</button></div>
     </form>
@@ -256,7 +392,7 @@ defineExpose({ refresh, openCreate })
 
   <BaseTable class="source-table" :empty="loading ? t.loading : (!filteredSources.length ? t.noResults : '')">
     <template #head><thead><tr><th class="select-column"><input type="checkbox" :checked="allPageSelected" :aria-label="t.selectAllPage" @change="togglePage"></th><th class="sortable-header" :class="{ active: sortActive('enabled') }" :aria-sort="sortActive('enabled') ? (sourceAscending ? 'ascending' : 'descending') : 'none'" @click="sortSources('enabled')">{{ t.status }} <SortIndicator :active="sortActive('enabled')" :ascending="sourceAscending" /></th><th class="sortable-header" :class="{ active: sortActive('name') }" :aria-sort="sortActive('name') ? (sourceAscending ? 'ascending' : 'descending') : 'none'" @click="sortSources('name')">{{ t.name }} <SortIndicator :active="sortActive('name')" :ascending="sourceAscending" /></th><th class="sortable-header" :class="{ active: sortActive('url') }" :aria-sort="sortActive('url') ? (sourceAscending ? 'ascending' : 'descending') : 'none'" @click="sortSources('url')">{{ t.url }} <SortIndicator :active="sortActive('url')" :ascending="sourceAscending" /></th><th>{{ t.region }}</th><th>{{ t.probeMode }}</th><th>{{ t.createdAt }}</th><th class="sortable-header" :class="{ active: sortActive('status') }" :aria-sort="sortActive('status') ? (sourceAscending ? 'ascending' : 'descending') : 'none'" @click="sortSources('status')">{{ t.monitoringStatus }} <SortIndicator :active="sortActive('status')" :ascending="sourceAscending" /></th><th>{{ t.actions }}</th></tr></thead></template>
-    <template #body><tbody><tr v-for="source in pagedSources" :key="source.id"><td class="select-column"><input type="checkbox" :checked="selected.includes(source.id)" @change="toggleSelected(source.id)"></td><td><span class="enabled-state" :class="{ disabled: source.enabled === false }"><i></i>{{ source.enabled === false ? t.disabled : t.enabled }}</span></td><td class="source-name-cell"><span class="admin-source-identity"><span>{{ source.name }}</span><span v-if="source.is_official" class="admin-source-badge" :title="t.official" :aria-label="t.official">🏛️</span><span v-if="source.is_recommended" class="admin-source-badge" :title="t.recommended" :aria-label="t.recommended">⭐</span></span></td><td class="source-url-cell">{{ source.base_url }}</td><td>{{ source.region || '—' }}</td><td>{{ source.probe_mode === 'docker_pull' ? t.dockerPullProbe : t.registryProbe }}</td><td>{{ formatDateTime(source.created_at) || t.unknown }}</td><td><span class="state" :class="source.status">{{ statusLabel(source.status, t) }}</span></td><td class="table-actions"><button class="icon-button status-action" :class="source.enabled === false ? 'status-action-enable' : 'status-action-disable'" type="button" @click="toggleEnabled(source)">{{ source.enabled === false ? t.enable : t.disable }}</button><button class="icon-button" type="button" @click="probe(source)">{{ t.probe }}</button><button class="icon-button" type="button" @click="openEdit(source)">{{ t.edit }}</button><button class="icon-button danger-button" type="button" :disabled="deletingSourceId !== null" @click="remove(source)">{{ deletingSourceId === source.id ? t.loading : t.remove }}</button></td></tr></tbody></template>
+    <template #body><tbody><tr v-for="source in pagedSources" :key="source.id"><td class="select-column"><input type="checkbox" :checked="selected.includes(source.id)" @change="toggleSelected(source.id)"></td><td><span class="enabled-state" :class="{ disabled: source.enabled === false }"><i></i>{{ source.enabled === false ? t.disabled : t.enabled }}</span></td><td class="source-name-cell"><span class="admin-source-identity"><span>{{ source.name }}</span><span v-if="source.is_official" class="admin-source-badge" :title="t.official" :aria-label="t.official">🏛️</span><span v-if="source.is_recommended" class="admin-source-badge" :title="t.recommended" :aria-label="t.recommended">⭐</span></span></td><td class="source-url-cell">{{ source.base_url }}</td><td>{{ source.region || '—' }}</td><td>{{ probeModeLabel(source.probe_mode) }}</td><td>{{ formatDateTime(source.created_at) || t.unknown }}</td><td><span class="state" :class="source.status">{{ statusLabel(source.status, t) }}</span></td><td class="table-actions"><button class="icon-button status-action" :class="source.enabled === false ? 'status-action-enable' : 'status-action-disable'" type="button" @click="toggleEnabled(source)">{{ source.enabled === false ? t.enable : t.disable }}</button><button class="icon-button" type="button" @click="probe(source)">{{ t.probe }}</button><button class="icon-button" type="button" @click="openEdit(source)">{{ t.edit }}</button><button class="icon-button danger-button" type="button" :disabled="deletingSourceId !== null" @click="remove(source)">{{ deletingSourceId === source.id ? t.loading : t.remove }}</button></td></tr></tbody></template>
   </BaseTable>
   <Pagination :page="page" :page-count="pageCount" :total="filteredSources.length" :page-size="pageSize" :page-size-options="[10, 25, 50, 100]" @change="page = $event" @update:page-size="changePageSize" />
 </template>

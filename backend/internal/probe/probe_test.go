@@ -51,6 +51,37 @@ func TestRunHonorsProbeTimeout(t *testing.T) {
 	}
 }
 
+func TestManifestProbeSkipsBlobSample(t *testing.T) {
+	t.Setenv("ALLOW_PRIVATE_TARGETS", "true")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/v2/":
+			w.WriteHeader(http.StatusOK)
+		case r.URL.Path == "/v2/library/alpine/manifests/latest" && r.Method == http.MethodHead:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		case r.URL.Path == "/v2/library/alpine/manifests/latest":
+			_ = json.NewEncoder(w).Encode(map[string]any{"schemaVersion": 2, "config": map[string]any{"digest": "sha256:test"}})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+	result := RunWithOptions(context.Background(), srv.URL, time.Second, Options{TestRepository: "library/alpine", TestTag: "latest", SkipBlob: true})
+	if result.Status != "online" || !result.ManifestSuccess || result.BlobSuccess {
+		t.Fatalf("unexpected manifest result: %+v", result)
+	}
+}
+
+func TestHTTPProbeAcceptsReachableErrorPage(t *testing.T) {
+	t.Setenv("ALLOW_PRIVATE_TARGETS", "true")
+	srv := httptest.NewServer(http.NotFoundHandler())
+	defer srv.Close()
+	result := RunHTTP(context.Background(), srv.URL, time.Second)
+	if result.Status != "online" || result.RegistryStatus != http.StatusNotFound {
+		t.Fatalf("unexpected HTTP result: %+v", result)
+	}
+}
+
 func TestDockerPullDisabledByDefault(t *testing.T) {
 	t.Setenv("ENABLE_REAL_DOCKER_PULL", "false")
 	result := RunDockerPull(context.Background(), time.Second, "library/hello-world:latest", 1<<20)

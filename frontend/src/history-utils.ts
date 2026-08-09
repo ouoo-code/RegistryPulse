@@ -12,6 +12,16 @@ export function historyTime(item: History): string {
   return item.checked_at || item.created_at || ''
 }
 
+export function sortHistoryNewest(history: History[]): History[] {
+  return [...history].sort((left, right) => {
+    const leftTimestamp = Date.parse(historyTime(left))
+    const rightTimestamp = Date.parse(historyTime(right))
+    const timeDifference = (Number.isFinite(rightTimestamp) ? rightTimestamp : 0) - (Number.isFinite(leftTimestamp) ? leftTimestamp : 0)
+    if (timeDifference !== 0) return timeDifference
+    return `${right.source_id}:${right.id || ''}`.localeCompare(`${left.source_id}:${left.id || ''}`)
+  })
+}
+
 export function isFault(item: History): boolean {
   return item.status === 'offline' || item.status === 'maintenance' || item.status === 'degraded' || Boolean(item.error)
 }

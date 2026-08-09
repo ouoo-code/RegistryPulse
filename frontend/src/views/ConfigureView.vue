@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { api, type Category, type Source } from '../api'
 import { renderContainerdMirrors, renderDockerMirrors, renderNerdctlMirrors, renderOnePanelMirrors, renderPodmanMirrors, renderRegistryPullCommands } from '../config-generator'
 import { useI18n } from '../i18n'
@@ -16,9 +16,19 @@ const selectedIds = ref<string[]>([])
 const sourceQuery = ref('')
 const loading = ref(true)
 const error = ref('')
+let errorTimer: number | undefined
+
+function showError(message: string) {
+  if (errorTimer !== undefined) window.clearTimeout(errorTimer)
+  error.value = message
+  errorTimer = window.setTimeout(() => {
+    error.value = ''
+    errorTimer = undefined
+  }, 5000)
+}
 
 const category = computed(() => categories.value.find(item => item.id === selectedCategory.value))
-const isDockerHub = computed(() => category.value?.slug === 'dockerhub' || (!category.value && !selectedCategory.value))
+const isDockerHub = computed(() => category.value?.id === 'dockerhub' || (!category.value && !selectedCategory.value))
 const visibleSources = computed(() => sources.value.filter(source => {
   const haystack = (source.name + ' ' + source.base_url + ' ' + (source.provider || '')).toLowerCase()
   return source.category_id === selectedCategory.value && (!sourceQuery.value || haystack.includes(sourceQuery.value.toLowerCase()))
@@ -26,8 +36,8 @@ const visibleSources = computed(() => sources.value.filter(source => {
 const selectedSources = computed(() => sources.value.filter(source => selectedIds.value.includes(source.id)))
 const urls = computed(() => mirrors.value.split(/\r?\n|,/).map(value => value.trim()).filter(Boolean))
 const output = computed(() => {
-  if (!isDockerHub.value && format.value === 'podman') return renderPodmanMirrors(urls.value, category.value?.slug || 'custom')
-  if (!isDockerHub.value) return renderRegistryPullCommands(urls.value, category.value?.slug || 'custom')
+  if (!isDockerHub.value && format.value === 'podman') return renderPodmanMirrors(urls.value, category.value?.id || 'custom')
+  if (!isDockerHub.value) return renderRegistryPullCommands(urls.value, category.value?.id || 'custom')
   if (format.value === 'docker') return renderDockerMirrors(urls.value)
   if (format.value === '1panel') return renderOnePanelMirrors(urls.value)
   if (format.value === 'podman') return renderPodmanMirrors(urls.value)
@@ -62,8 +72,8 @@ async function copy() {
   setTimeout(() => copied.value = false, 1500)
 }
 
-watch(() => category.value?.slug, slug => {
-  format.value = slug === 'dockerhub' ? 'docker' : 'commands'
+watch(() => category.value?.id, id => {
+  format.value = id === 'dockerhub' ? 'docker' : 'commands'
 })
 
 onMounted(async () => {
@@ -74,15 +84,19 @@ onMounted(async () => {
     ])
     categories.value = loadedCategories
     sources.value = loadedSources
-    selectedCategory.value = loadedCategories.find(item => item.slug === 'dockerhub')?.id || loadedCategories[0]?.id || ''
+    selectedCategory.value = loadedCategories.find(item => item.slug.toLowerCase() === 'dockerhub')?.id || loadedCategories[0]?.id || ''
     const initial = loadedSources.filter(source => source.category_id === selectedCategory.value && source.status === 'online').slice(0, 3)
     selectedIds.value = initial.map(source => source.id)
     syncMirrors()
   } catch {
-    error.value = t.value.apiError
+    showError(t.value.apiError)
   } finally {
     loading.value = false
   }
+})
+
+onUnmounted(() => {
+  if (errorTimer !== undefined) window.clearTimeout(errorTimer)
 })
 </script>
 

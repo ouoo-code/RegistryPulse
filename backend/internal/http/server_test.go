@@ -1,13 +1,46 @@
 package httpapi
 
 import (
+	"bytes"
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"testing"
 
 	"github.com/ouoo-code/RegistryPulse/internal/domain"
+	"github.com/ouoo-code/RegistryPulse/internal/probe"
 )
+
+func TestAdminTransientProbeUsesUnsavedConfiguration(t *testing.T) {
+	t.Setenv("ADMIN_API_TOKEN", "test-token")
+	t.Setenv("ALLOW_PRIVATE_TARGETS", "true")
+	t.Setenv("ALLOW_INSECURE_HTTP", "true")
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer target.Close()
+
+	s := New(domain.NewMemoryStore())
+	body := bytes.NewBufferString(`{"base_url":"` + target.URL + `","probe_mode":"http","request_timeout_seconds":1}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/sources/test", body)
+	req.Header.Set("Authorization", "Bearer test-token")
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+	s.Routes().ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", res.Code, res.Body.String())
+	}
+	var response struct {
+		Data probe.Result `json:"data"`
+	}
+	if err := json.Unmarshal(res.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Data.Status != "online" {
+		t.Fatalf("unexpected result: %+v", response.Data)
+	}
+}
 
 func TestPublicSourcesPaginationAndMetadata(t *testing.T) {
 	s := New(domain.NewMemoryStore())
@@ -31,6 +64,40 @@ func TestPublicSourcesPaginationAndMetadata(t *testing.T) {
 	}
 	if len(body.Data) != 1 || body.Meta.Count != 1 || body.Meta.PageSize != 1 {
 		t.Fatalf("unexpected pagination: %+v", body)
+	}
+}
+
+func TestCategoryDisplaySlugKeepsStableIDFiltering(t *testing.T) {
+	s := New(domain.NewMemoryStore())
+	for _, path := range []string{"/api/v1/public/categories/DockerHub", "/api/v1/public/sources?category=DockerHub"} {
+		req := httptest.NewRequest("GET", path, nil)
+		res := httptest.NewRecorder()
+		s.Routes().ServeHTTP(res, req)
+		if res.Code != 200 {
+			t.Fatalf("path=%s status=%d body=%s", path, res.Code, res.Body.String())
+		}
+	}
+}
+
+func TestUnknownSourceSubrouteReturnsSingleError(t *testing.T) {
+	s := New(domain.NewMemoryStore())
+	for _, path := range []string{
+		"/api/v1/public/sources/00000000-0000-0000-0000-000000000000/history",
+		"/api/v1/public/sources/00000000-0000-0000-0000-000000000000/aggregates",
+		"/api/v1/public/sources/00000000-0000-0000-0000-000000000000/incidents",
+	} {
+		res := httptest.NewRecorder()
+		s.Routes().ServeHTTP(res, httptest.NewRequest("GET", path, nil))
+		if res.Code != 404 {
+			t.Fatalf("path=%s status=%d body=%s", path, res.Code, res.Body.String())
+		}
+		var body map[string]any
+		if err := json.Unmarshal(res.Body.Bytes(), &body); err != nil {
+			t.Fatalf("path=%s returned malformed JSON: %v; body=%s", path, err, res.Body.String())
+		}
+		if body["success"] != false {
+			t.Fatalf("path=%s unexpected body=%s", path, res.Body.String())
+		}
 	}
 }
 

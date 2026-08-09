@@ -176,6 +176,15 @@
 .admin-editor-form .form-field-test-image { grid-column: 1 / span 2; }
 .admin-editor-form .form-field-probe-mode { grid-column: 3; }
 .admin-editor-form .form-field-timeout { grid-column: 4; }
+.admin-editor-form .probe-config-toggle { grid-column: 1 / -1; min-width: 0; min-height: 40px; padding: 10px 12px; border: 1px solid #d9e2ec; border-radius: 9px; background: #f8fafc; color: #334b65; flex-wrap: nowrap; }
+.admin-editor-form .probe-config-toggle-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; cursor: pointer; }
+.admin-editor-form .probe-test-feedback { flex: 0 1 240px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; font-size: 12px; line-height: 1.4; }
+.admin-editor-form .probe-test-feedback.is-running { color: #657589; }
+.admin-editor-form .probe-test-feedback.is-success { color: #147a4b; }
+.admin-editor-form .probe-test-feedback.is-error { color: #b42318; }
+.admin-editor-form .probe-config-toggle .probe-test-button { flex: 0 0 auto; margin-left: auto; white-space: nowrap; }
+.admin-editor-form select:disabled,
+.admin-editor-form input[readonly] { color: #8193a6; background: #f4f7fa; cursor: not-allowed; }
 .editor-checks { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .checkbox-field { display: flex; align-items: center; gap: 8px; color: #4d6075; font-size: 13px; }
 .checkbox-field input { width: 16px; height: 16px; margin: 0; accent-color: #2468e8; }
@@ -193,8 +202,8 @@
 .dialog-backdrop { position: fixed; z-index: 20; inset: 0; display: grid; place-items: center; padding: 24px; background: #14223566; }
 .dialog { width: min(1080px, 100%); max-height: min(860px, calc(100vh - 48px)); overflow: auto; border: 1px solid #dfe7f0; border-radius: 16px; background: #fff; box-shadow: 0 24px 80px #14223533; }
 .dialog-small { width: min(440px, 100%); }
-.dialog-category { width: min(540px, 100%); }
-.category-editor-form { grid-template-columns: 1fr; gap: 14px; }
+.dialog-category { width: min(760px, 100%); }
+.category-editor-form { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .category-editor-form .form-field-wide { grid-column: span 1; }
 .category-editor-form .editor-checks { grid-template-columns: 1fr; }
 .dialog-header { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; padding: 18px 22px; border-bottom: 1px solid #e7edf3; background: #fff; }
@@ -275,6 +284,12 @@
 .dark .base-table .table-actions .status-action-disable { border-color: #814545; background: #3a2024; color: #ff9696; }
 .dark .base-table .table-actions .status-action-disable:hover { background: #51282d; }
 .dark .editor-checks .checkbox-field { background: #202d3a; border-color: #354657; color: #dce7f2; }
+.dark .admin-editor-form .probe-config-toggle { background: #202d3a; border-color: #354657; color: #dce7f2; }
+.dark .admin-editor-form .probe-test-feedback.is-running { color: #aebfd1; }
+.dark .admin-editor-form .probe-test-feedback.is-success { color: #65d39c; }
+.dark .admin-editor-form .probe-test-feedback.is-error { color: #ff9b9b; }
+.dark .admin-editor-form select:disabled,
+.dark .admin-editor-form input[readonly] { color: #9db0c4; background: #273543; }
 .dark .setting-highlight { border-color: #245252; background: #102b2c; }
 .dark .totp-settings { border-color: #354657; background: #202d3a; }
 .dark .settings-card-heading h2 { color: #eef4fb; }
@@ -323,6 +338,8 @@
   .admin-editor-form .form-field-probe-mode,
   .admin-editor-form .form-field-timeout { grid-column: span 1; }
   .editor-checks { grid-template-columns: 1fr; }
+  .admin-editor-form .probe-config-toggle { flex-wrap: wrap; }
+  .admin-editor-form .probe-test-feedback { order: 3; flex: 1 0 100%; }
   .dialog-backdrop { padding: 12px; }
   .dialog-body { padding: 16px; }
   .base-table { padding-left: 12px; padding-right: 12px; }

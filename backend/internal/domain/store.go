@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -51,15 +52,37 @@ type MemoryStore struct {
 func NewMemoryStore() *MemoryStore {
 	now := time.Now().UTC()
 	categories := []Category{
-		{ID: "dockerhub", Slug: "dockerhub", Name: "Docker Hub", Description: "Docker 官方镜像仓库", Enabled: true, CreatedAt: now},
-		{ID: "ghcr", Slug: "ghcr", Name: "GitHub Container Registry", Description: "GitHub 的 OCI 镜像仓库", Enabled: true, CreatedAt: now},
-		{ID: "quay", Slug: "quay", Name: "Quay", Description: "Red Hat Quay 镜像仓库", Enabled: true, CreatedAt: now},
-		{ID: "mcr", Slug: "mcr", Name: "Microsoft Container Registry", Description: "Microsoft 容器镜像仓库", Enabled: true, CreatedAt: now},
-		{ID: "k8s", Slug: "k8s", Name: "Kubernetes Registry", Description: "Kubernetes 相关镜像仓库", Enabled: true, SortOrder: 50, CreatedAt: now},
-		{ID: "gcr", Slug: "gcr", Name: "Google Container Registry", Description: "Google 容器镜像仓库", Enabled: true, SortOrder: 60, CreatedAt: now},
-		{ID: "elastic", Slug: "elastic", Name: "Elastic Container Registry", Description: "Elastic 官方镜像仓库", Enabled: true, SortOrder: 70, CreatedAt: now},
-		{ID: "nvcr", Slug: "nvcr", Name: "NVIDIA Container Registry", Description: "NVIDIA 容器镜像仓库", Enabled: true, SortOrder: 80, CreatedAt: now},
+		{ID: "dockerhub", Slug: "DockerHub", Name: "Docker Hub", Description: "Docker 官方镜像仓库", Enabled: true, CreatedAt: now},
+		{ID: "ghcr", Slug: "GHCR", Name: "GitHub Container Registry", Description: "GitHub 的 OCI 镜像仓库", Enabled: true, CreatedAt: now},
+		{ID: "quay", Slug: "Quay", Name: "Quay", Description: "Red Hat Quay 镜像仓库", Enabled: true, CreatedAt: now},
+		{ID: "mcr", Slug: "MCR", Name: "Microsoft Container Registry", Description: "Microsoft 容器镜像仓库", Enabled: true, CreatedAt: now},
+		{ID: "k8s", Slug: "K8s", Name: "Kubernetes Registry", Description: "Kubernetes 相关镜像仓库", Enabled: true, SortOrder: 50, CreatedAt: now},
+		{ID: "gcr", Slug: "GCR", Name: "Google Container Registry", Description: "Google 容器镜像仓库", Enabled: true, SortOrder: 60, CreatedAt: now},
+		{ID: "elastic", Slug: "Elastic", Name: "Elastic Container Registry", Description: "Elastic 官方镜像仓库", Enabled: true, SortOrder: 70, CreatedAt: now},
+		{ID: "nvcr", Slug: "NVCR", Name: "NVIDIA Container Registry", Description: "NVIDIA 容器镜像仓库", Enabled: true, SortOrder: 80, CreatedAt: now},
 		{ID: "custom", Slug: "custom", Name: "自定义 OCI Registry", Description: "自定义 OCI 镜像仓库", Enabled: true, SortOrder: 90, CreatedAt: now},
+	}
+	for i := range categories {
+		defaults := map[string]struct {
+			repository string
+			tag        string
+			mode       string
+			timeout    int
+		}{
+			"dockerhub": {"library/alpine", "latest", "registry", 15},
+			"ghcr":      {"stefanprodan/podinfo", "latest", "manifest", 20},
+			"quay":      {"prometheus/busybox", "latest", "manifest", 20},
+			"mcr":       {"dotnet/runtime", "8.0", "manifest", 20},
+			"k8s":       {"pause", "3.9", "manifest", 20},
+			"gcr":       {"google-containers/pause", "3.9", "manifest", 20},
+			"elastic":   {"beats/metricbeat", "8.15.0", "manifest", 20},
+			"nvcr":      {"nvidia/cuda", "12.4.1-base-ubuntu22.04", "manifest", 30},
+			"custom":    {"library/alpine", "latest", "registry", 15},
+		}
+		if value, ok := defaults[categories[i].ID]; ok {
+			categories[i].DefaultTestRepository, categories[i].DefaultTestTag = value.repository, value.tag
+			categories[i].DefaultProbeMode, categories[i].DefaultTimeoutSeconds = value.mode, value.timeout
+		}
 	}
 	return &MemoryStore{categories: categories, sources: map[string]Source{
 		"dockerhub-official": {ID: "dockerhub-official", CategoryID: "dockerhub", Name: "Docker Hub 官方", BaseURL: "https://registry-1.docker.io", DisplayURL: "https://registry-1.docker.io", Provider: "Docker", Region: "Global", Tags: []string{"official", "oci"}, Enabled: true, Status: "unknown", CreatedAt: now, UpdatedAt: now},
@@ -80,7 +103,7 @@ func (s *MemoryStore) Categories() []Category {
 }
 func (s *MemoryStore) Category(slug string) (Category, error) {
 	for _, c := range s.Categories() {
-		if c.Slug == slug || c.ID == slug {
+		if c.ID == slug || strings.EqualFold(c.Slug, slug) {
 			return c, nil
 		}
 	}
@@ -92,6 +115,7 @@ func (s *MemoryStore) Sources() []Source {
 	out := make([]Source, 0, len(s.sources))
 	for _, v := range s.sources {
 		v.Tags = append([]string(nil), v.Tags...)
+		v = s.applyCategoryDefaultsLocked(v)
 		out = append(out, v)
 	}
 	sort.SliceStable(out, func(i, j int) bool {
@@ -112,7 +136,7 @@ func (s *MemoryStore) Source(id string) (Source, error) {
 	if !ok {
 		return Source{}, ErrNotFound
 	}
-	return v, nil
+	return s.applyCategoryDefaultsLocked(v), nil
 }
 func (s *MemoryStore) History(id string, limit int) []ProbeResult {
 	s.mu.RLock()
@@ -169,6 +193,22 @@ func (s *MemoryStore) UpsertSource(in SourceInput, id string) (Source, error) {
 		if in.ProbeMode != "" {
 			old.ProbeMode = in.ProbeMode
 		}
+		old.ProbeConfigCustom = in.ProbeConfigCustom
+		if in.TestRepository != "" {
+			old.TestRepository = in.TestRepository
+		}
+		if in.TestTag != "" {
+			old.TestTag = in.TestTag
+		}
+		if in.RequestTimeout != nil {
+			old.RequestTimeout = *in.RequestTimeout
+		}
+		if in.DownloadTestBytes != nil {
+			old.DownloadTestBytes = *in.DownloadTestBytes
+		}
+		if in.TestImageID != nil {
+			old.TestImageID = *in.TestImageID
+		}
 		old.UpdatedAt = now
 		s.sources[id] = old
 		return old, nil
@@ -177,7 +217,7 @@ func (s *MemoryStore) UpsertSource(in SourceInput, id string) (Source, error) {
 	if in.Maintenance != nil {
 		maintenance = *in.Maintenance
 	}
-	v := Source{ID: id, CategoryID: in.CategoryID, Name: in.Name, BaseURL: in.BaseURL, DisplayURL: in.DisplayURL, Provider: in.Provider, Region: in.Region, Tags: append([]string(nil), in.Tags...), Enabled: enabled, Maintenance: maintenance, Status: "unknown", CreatedAt: now, UpdatedAt: now}
+	v := Source{ID: id, CategoryID: in.CategoryID, Name: in.Name, BaseURL: in.BaseURL, DisplayURL: in.DisplayURL, Provider: in.Provider, Region: in.Region, Tags: append([]string(nil), in.Tags...), Enabled: enabled, Maintenance: maintenance, ProbeConfigCustom: in.ProbeConfigCustom, Status: "unknown", CreatedAt: now, UpdatedAt: now}
 	if v.DisplayURL == "" {
 		v.DisplayURL = v.BaseURL
 	}
@@ -217,6 +257,43 @@ func (s *MemoryStore) UpsertSource(in SourceInput, id string) (Source, error) {
 	}
 	s.sources[id] = v
 	return v, nil
+}
+
+func (s *MemoryStore) applyCategoryDefaultsLocked(v Source) Source {
+	if v.ProbeConfigCustom {
+		return v
+	}
+	for _, category := range s.categories {
+		if category.ID != v.CategoryID {
+			continue
+		}
+		if category.DefaultProbeMode != "" {
+			v.ProbeMode = category.DefaultProbeMode
+		}
+		if category.DefaultTestRepository != "" {
+			v.TestRepository = category.DefaultTestRepository
+		}
+		if category.DefaultTestTag != "" {
+			v.TestTag = category.DefaultTestTag
+		}
+		if category.DefaultTimeoutSeconds > 0 {
+			v.RequestTimeout = category.DefaultTimeoutSeconds
+		}
+		break
+	}
+	if v.ProbeMode == "" {
+		v.ProbeMode = "registry"
+	}
+	if v.TestRepository == "" {
+		v.TestRepository = "library/alpine"
+	}
+	if v.TestTag == "" {
+		v.TestTag = "latest"
+	}
+	if v.RequestTimeout <= 0 {
+		v.RequestTimeout = 15
+	}
+	return v
 }
 func (s *MemoryStore) DeleteSource(id string) error {
 	s.mu.Lock()

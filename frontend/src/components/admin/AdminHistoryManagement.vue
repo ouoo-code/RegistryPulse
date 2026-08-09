@@ -4,6 +4,7 @@ import { adminApi } from '../../admin-api'
 import { type History, type Source } from '../../api'
 import { useI18n, statusLabel } from '../../i18n'
 import { formatDateTime } from '../../time'
+import { sortHistoryNewest } from '../../history-utils'
 import BaseTable from '../BaseTable.vue'
 import Pagination from '../Pagination.vue'
 
@@ -21,14 +22,14 @@ const page = ref(1)
 const pageSize = ref(25)
 const loading = ref(false)
 const sourceNames = computed(() => new Map(sources.value.map(source => [source.id, source.name])))
-const filtered = computed(() => results.value.filter(result => {
+const filtered = computed(() => sortHistoryNewest(results.value.filter(result => {
   const sourceName = sourceNames.value.get(result.source_id) || result.source_id
   return (!sourceFilter.value || result.source_id === sourceFilter.value)
     && (!statusFilter.value || result.status === statusFilter.value)
     && (!dateFrom.value || String(result.checked_at || '').slice(0, 10) >= dateFrom.value)
     && (!dateTo.value || String(result.checked_at || '').slice(0, 10) <= dateTo.value)
     && (!query.value || `${sourceName} ${result.error || ''} ${result.error_stage || ''}`.toLowerCase().includes(query.value.toLowerCase()))
-}))
+})))
 const pageCount = computed(() => Math.max(1, Math.ceil(filtered.value.length / pageSize.value)))
 const paged = computed(() => filtered.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
 function resetPage() { page.value = 1 }

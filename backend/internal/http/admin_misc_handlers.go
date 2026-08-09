@@ -124,7 +124,7 @@ func (s *Server) adminCategories(w http.ResponseWriter, r *http.Request) {
 			writeError(w, 400, "INVALID_CATEGORY", "id, slug and name are required")
 			return
 		}
-		_, err := db.ExecContext(r.Context(), `INSERT INTO registry_categories(id,slug,name,description,icon,official_url,default_test_repository,default_manifest_path,auth_type,enabled,sort_order) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, in.ID, in.Slug, in.Name, in.Description, in.Icon, in.OfficialURL, in.DefaultTestRepository, in.DefaultManifestPath, in.AuthType, in.Enabled, in.SortOrder)
+		_, err := db.ExecContext(r.Context(), `INSERT INTO registry_categories(id,slug,name,description,icon,official_url,default_test_repository,default_test_tag,default_test_image_id,default_probe_mode,default_timeout_seconds,default_manifest_path,auth_type,enabled,sort_order) VALUES($1,$2,$3,$4,$5,$6,$7,$8,NULLIF($9,'')::uuid,$10,$11,$12,$13,$14,$15)`, in.ID, in.Slug, in.Name, in.Description, in.Icon, in.OfficialURL, in.DefaultTestRepository, in.DefaultTestTag, in.DefaultTestImageID, in.DefaultProbeMode, in.DefaultTimeoutSeconds, in.DefaultManifestPath, in.AuthType, in.Enabled, in.SortOrder)
 		if err != nil {
 			writeError(w, 500, "CATEGORY_CREATE_FAILED", "could not create category")
 			return
@@ -163,7 +163,7 @@ func (s *Server) adminCategories(w http.ResponseWriter, r *http.Request) {
 			writeError(w, 400, "INVALID_JSON", "invalid request body")
 			return
 		}
-		res, err := db.ExecContext(r.Context(), `UPDATE registry_categories SET slug=$1,name=$2,description=$3,icon=$4,official_url=$5,default_test_repository=$6,default_manifest_path=$7,auth_type=$8,enabled=$9,sort_order=$10 WHERE id=$11`, in.Slug, in.Name, in.Description, in.Icon, in.OfficialURL, in.DefaultTestRepository, in.DefaultManifestPath, in.AuthType, in.Enabled, in.SortOrder, id)
+		res, err := db.ExecContext(r.Context(), `UPDATE registry_categories SET slug=$1,name=$2,description=$3,icon=$4,official_url=$5,default_test_repository=$6,default_test_tag=$7,default_test_image_id=NULLIF($8,'')::uuid,default_probe_mode=$9,default_timeout_seconds=$10,default_manifest_path=$11,auth_type=$12,enabled=$13,sort_order=$14 WHERE id=$15`, in.Slug, in.Name, in.Description, in.Icon, in.OfficialURL, in.DefaultTestRepository, in.DefaultTestTag, in.DefaultTestImageID, in.DefaultProbeMode, in.DefaultTimeoutSeconds, in.DefaultManifestPath, in.AuthType, in.Enabled, in.SortOrder, id)
 		if err != nil {
 			writeError(w, 500, "CATEGORY_UPDATE_FAILED", "could not update category")
 			return

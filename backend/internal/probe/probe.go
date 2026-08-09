@@ -70,6 +70,18 @@ type Options struct {
 	TestRepository    string
 	TestTag           string
 	DownloadTestBytes int64
+	SkipBlob          bool
+}
+
+const (
+	ModeRegistry   = "registry"
+	ModeManifest   = "manifest"
+	ModeHTTP       = "http"
+	ModeDockerPull = "docker_pull"
+)
+
+func SupportedModes() []string {
+	return []string{ModeRegistry, ModeManifest, ModeHTTP, ModeDockerPull}
 }
 
 func ValidateTarget(raw string, allowPrivate bool) error {
@@ -269,6 +281,10 @@ func RunWithOptions(ctx context.Context, raw string, timeout time.Duration, opti
 	result.ManifestSuccess, result.ManifestStatus = true, manifest.ManifestStatus
 	result.ManifestContentType, result.ManifestDigest = manifest.Manifest.MediaType, manifest.ManifestDigest
 	result.ManifestSize = manifest.ManifestSize
+	if options.SkipBlob {
+		result.Status = "online"
+		return result
+	}
 	if manifest.Manifest.Config.Digest != "" {
 		blobStart := time.Now()
 		blobStarted := time.Now()

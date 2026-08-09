@@ -138,6 +138,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .filter-bar { margin-top: 14px; }
 .search-box, .filter-box, .tag-filter { height: 34px; border-color: var(--line); border-radius: 7px; background: var(--bg-soft); color: var(--faint); }
 .search-box input, .filter-box select, .tag-filter input { color: var(--text); font-size: 10px; }
+.filter-box select { border: 0; outline: 0; background: transparent; color: var(--text); color-scheme: light; }
 .registry-table-head { margin-top: 16px; padding-bottom: 7px; color: var(--faint); font-size: 9px; border-bottom: 1px solid var(--line); }
 .registry-table-head, .registry-row { grid-template-columns: 25px minmax(150px, 1.05fr) minmax(220px, 1.55fr) minmax(110px, .8fr) 140px 105px; }
 .registry-table-head .select-column { text-align: center; }
@@ -298,6 +299,8 @@ th { color: var(--faint); font-weight: 600; text-transform: uppercase; letter-sp
 .dark .panel, .dark .metric-card, .dark .category-panel, .dark .registry-panel, .dark .detail-grid > div, .dark .empty,
 .dark .compact-health, .dark .refresh-button, .dark .sort-direction { background: var(--bg-raised); border-color: var(--line); }
 .dark .search-box, .dark .filter-box, .dark .tag-filter { background: var(--bg-soft); border-color: var(--line); }
+.dark .filter-box select { background: transparent; color: var(--text); color-scheme: dark; }
+.dark .filter-box select option { background: var(--bg-raised); color: var(--text); }
 .dark .category-link { color: var(--muted); }
 .dark .category-link:hover, .dark .category-link.active { background: var(--accent-soft); color: var(--accent); }
 .dark .registry-identity > a:first-child, .dark .latency strong { color: var(--text); }

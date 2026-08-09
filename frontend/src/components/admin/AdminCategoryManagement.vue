@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { adminApi } from '../../admin-api'
-import { type Category, type CategoryInput, type Source } from '../../api'
+import { type Category, type CategoryInput, type Source, type TestImage } from '../../api'
 import { useI18n } from '../../i18n'
 import BaseDialog from '../BaseDialog.vue'
 import BaseTable from '../BaseTable.vue'
@@ -13,6 +13,7 @@ const props = defineProps<{ token: string }>()
 const emit = defineEmits<{ notice: [message: string]; error: [message: string] }>()
 const { t } = useI18n()
 const categories = ref<Category[]>([])
+const testImages = ref<TestImage[]>([])
 const categorySort = ref<'sort_order' | 'name' | 'status'>('sort_order')
 const categoryAscending = ref(true)
 const editorOpen = ref(false)
@@ -30,12 +31,13 @@ function sortCategories(key: 'sort_order' | 'name' | 'status') {
 function sortActive(key: 'sort_order' | 'name' | 'status') { return categorySort.value === key }
 
 function emptyForm(): CategoryInput {
-  return { id: '', slug: '', name: '', description: '', auth_type: 'registry', enabled: true, sort_order: 100 }
+  return { id: '', slug: '', name: '', description: '', auth_type: 'registry', default_test_repository: 'library/alpine', default_test_tag: 'latest', default_test_image_id: '', default_probe_mode: 'registry', default_timeout_seconds: 15, enabled: true, sort_order: 100 }
 }
 
 async function refresh() {
   try {
-    const [categoryList, sourceList] = await Promise.all([adminApi.categories(props.token), adminApi.sources(props.token)])
+    const [categoryList, sourceList, testImageList] = await Promise.all([adminApi.categories(props.token), adminApi.sources(props.token), adminApi.testImages(props.token)])
+    testImages.value = testImageList
     const counts = new Map<string, number>()
     for (const source of sourceList) counts.set(source.category_id, (counts.get(source.category_id) || 0) + 1)
     categories.value = categoryList.map(category => ({ ...category, source_count: counts.get(category.id) || 0 })).sort((left, right) => (left.sort_order || 0) - (right.sort_order || 0) || left.name.localeCompare(right.name))
@@ -50,7 +52,7 @@ function openCreate() {
 
 function openEdit(category: Category) {
   editingId.value = category.id
-  form.value = { id: category.id, slug: category.slug, name: category.name, description: category.description, icon: category.icon, official_url: category.official_url, default_test_repository: category.default_test_repository, default_manifest_path: category.default_manifest_path, auth_type: category.auth_type, enabled: category.enabled !== false, sort_order: category.sort_order || 0 }
+  form.value = { id: category.id, slug: category.slug, name: category.name, description: category.description, icon: category.icon, official_url: category.official_url, default_test_repository: category.default_test_repository, default_test_tag: category.default_test_tag, default_test_image_id: category.default_test_image_id || '', default_probe_mode: category.default_probe_mode || 'registry', default_timeout_seconds: category.default_timeout_seconds || 15, default_manifest_path: category.default_manifest_path, auth_type: category.auth_type, enabled: category.enabled !== false, sort_order: category.sort_order || 0 }
   editorOpen.value = true
 }
 
@@ -68,7 +70,7 @@ async function save() {
 
 async function toggleEnabled(category: Category) {
   try {
-    await adminApi.updateCategory(props.token, category.id, { id: category.id, slug: category.slug, name: category.name, description: category.description, icon: category.icon, official_url: category.official_url, default_test_repository: category.default_test_repository, default_manifest_path: category.default_manifest_path, auth_type: category.auth_type, enabled: category.enabled === false, sort_order: category.sort_order || 0 })
+    await adminApi.updateCategory(props.token, category.id, { id: category.id, slug: category.slug, name: category.name, description: category.description, icon: category.icon, official_url: category.official_url, default_test_repository: category.default_test_repository, default_test_tag: category.default_test_tag, default_test_image_id: category.default_test_image_id, default_probe_mode: category.default_probe_mode, default_timeout_seconds: category.default_timeout_seconds, default_manifest_path: category.default_manifest_path, auth_type: category.auth_type, enabled: category.enabled === false, sort_order: category.sort_order || 0 })
     await refresh()
   } catch (error) { emit('error', error instanceof Error ? error.message : t.value.categorySaveError) }
 }
@@ -96,12 +98,15 @@ defineExpose({ refresh })
       <FormField :label="t.sortOrder"><input v-model.number="form.sort_order" type="number" min="0" max="999999" required></FormField>
       <FormField :label="t.id"><input v-model="form.id" :readonly="Boolean(editingId)" required></FormField>
       <FormField :label="t.name"><input v-model="form.name" required></FormField>
-      <FormField :label="t.slug"><input v-model="form.slug" required></FormField>
-      <FormField :label="t.description" wide><textarea v-model="form.description" rows="3"></textarea></FormField>
+      <FormField :label="t.categoryKey"><input v-model="form.slug" required></FormField>
+      <FormField :label="t.testImage"><select v-model="form.default_test_image_id"><option value="">{{ t.systemDefaultTestImage }}</option><option v-for="image in testImages.filter(item => item.enabled)" :key="image.id" :value="image.id">{{ image.reference }} · {{ image.max_bytes / 1048576 }} M</option></select></FormField>
+      <FormField :label="t.probeMode"><select v-model="form.default_probe_mode"><option value="registry">{{ t.registryProbe }}</option><option value="manifest">{{ t.manifestProbe }}</option><option value="http">{{ t.httpProbe }}</option><option value="docker_pull">{{ t.dockerPullProbe }}</option></select></FormField>
+      <FormField :label="t.defaultTimeout"><input v-model.number="form.default_timeout_seconds" type="number" min="1" max="300" required></FormField>
+      <FormField :label="t.description"><input v-model="form.description"></FormField>
       <div class="editor-checks category-editor-checks"><label class="checkbox-field"><input v-model="form.enabled" type="checkbox"><span>{{ t.status }}：{{ form.enabled ? t.enabled : t.disabled }}</span></label></div>
       <div class="editor-form-actions"><button class="refresh" type="submit">{{ t.save }}</button><button class="icon-button" type="button" @click="closeEditor">{{ t.cancel }}</button></div>
     </form>
   </BaseDialog>
 
-  <BaseTable class="category-table" :empty="!categories.length ? t.noResults : ''"><template #head><thead><tr><th class="sortable-header" :class="{ active: sortActive('sort_order') }" :aria-sort="sortActive('sort_order') ? (categoryAscending ? 'ascending' : 'descending') : 'none'" @click="sortCategories('sort_order')">{{ t.sortOrder }} <SortIndicator :active="sortActive('sort_order')" :ascending="categoryAscending" /></th><th class="sortable-header" :class="{ active: sortActive('status') }" :aria-sort="sortActive('status') ? (categoryAscending ? 'ascending' : 'descending') : 'none'" @click="sortCategories('status')">{{ t.status }} <SortIndicator :active="sortActive('status')" :ascending="categoryAscending" /></th><th class="sortable-header" :class="{ active: sortActive('name') }" :aria-sort="sortActive('name') ? (categoryAscending ? 'ascending' : 'descending') : 'none'" @click="sortCategories('name')">{{ t.name }} <SortIndicator :active="sortActive('name')" :ascending="categoryAscending" /></th><th>{{ t.id }}</th><th>{{ t.slug }}</th><th>{{ t.associatedSources }}</th><th>{{ t.createdAt }}</th><th>{{ t.actions }}</th></tr></thead></template><template #body><tbody><tr v-for="category in displayedCategories" :key="category.id"><td>{{ category.sort_order || 0 }}</td><td><span class="enabled-state" :class="{ disabled: category.enabled === false }"><i></i>{{ category.enabled === false ? t.disabled : t.enabled }}</span></td><td>{{ category.name }}</td><td>{{ category.id }}</td><td>{{ category.slug }}</td><td>{{ category.source_count || 0 }}</td><td>{{ formatDateTime(category.created_at) || t.unknown }}</td><td class="table-actions"><button class="icon-button status-action" :class="category.enabled === false ? 'status-action-enable' : 'status-action-disable'" type="button" @click="toggleEnabled(category)">{{ category.enabled === false ? t.enable : t.disable }}</button><button class="icon-button" type="button" @click="openEdit(category)">{{ t.edit }}</button><button class="icon-button danger-button" type="button" :title="(category.source_count || 0) > 0 ? t.categoryInUse : ''" @click="remove(category)">{{ t.delete }}</button></td></tr></tbody></template></BaseTable>
+  <BaseTable class="category-table" :empty="!categories.length ? t.noResults : ''"><template #head><thead><tr><th class="sortable-header" :class="{ active: sortActive('sort_order') }" :aria-sort="sortActive('sort_order') ? (categoryAscending ? 'ascending' : 'descending') : 'none'" @click="sortCategories('sort_order')">{{ t.sortOrder }} <SortIndicator :active="sortActive('sort_order')" :ascending="categoryAscending" /></th><th class="sortable-header" :class="{ active: sortActive('status') }" :aria-sort="sortActive('status') ? (categoryAscending ? 'ascending' : 'descending') : 'none'" @click="sortCategories('status')">{{ t.status }} <SortIndicator :active="sortActive('status')" :ascending="categoryAscending" /></th><th class="sortable-header" :class="{ active: sortActive('name') }" :aria-sort="sortActive('name') ? (categoryAscending ? 'ascending' : 'descending') : 'none'" @click="sortCategories('name')">{{ t.name }} <SortIndicator :active="sortActive('name')" :ascending="categoryAscending" /></th><th>{{ t.id }}</th><th>{{ t.categoryKey }}</th><th>{{ t.associatedSources }}</th><th>{{ t.createdAt }}</th><th>{{ t.actions }}</th></tr></thead></template><template #body><tbody><tr v-for="category in displayedCategories" :key="category.id"><td>{{ category.sort_order || 0 }}</td><td><span class="enabled-state" :class="{ disabled: category.enabled === false }"><i></i>{{ category.enabled === false ? t.disabled : t.enabled }}</span></td><td>{{ category.name }}</td><td>{{ category.id }}</td><td>{{ category.slug }}</td><td>{{ category.source_count || 0 }}</td><td>{{ formatDateTime(category.created_at) || t.unknown }}</td><td class="table-actions"><button class="icon-button status-action" :class="category.enabled === false ? 'status-action-enable' : 'status-action-disable'" type="button" @click="toggleEnabled(category)">{{ category.enabled === false ? t.enable : t.disable }}</button><button class="icon-button" type="button" @click="openEdit(category)">{{ t.edit }}</button><button class="icon-button danger-button" type="button" :title="(category.source_count || 0) > 0 ? t.categoryInUse : ''" @click="remove(category)">{{ t.delete }}</button></td></tr></tbody></template></BaseTable>
 </template>

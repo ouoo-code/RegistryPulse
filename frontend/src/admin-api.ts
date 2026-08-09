@@ -1,4 +1,4 @@
-import { api, type AdminRole, type AdminSettings, type AdminTask, type AdminUser, type Category, type CategoryInput, type History, type NotificationChannel, type NotificationRule, type ProbeNode, type Source, type TestImage, type TotpSettings } from './api'
+import { api, type AdminRole, type AdminSettings, type AdminTask, type AdminUser, type Category, type CategoryInput, type History, type NotificationChannel, type NotificationRule, type ProbeNode, type ProbeTestInput, type ProbeTestResult, type Source, type TestImage, type TotpSettings } from './api'
 
 export function adminHeaders(token: string): HeadersInit {
   return { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }
@@ -10,6 +10,7 @@ export function adminRequest<T>(token: string, path: string, options: RequestIni
 
 export const adminApi = {
   sources: (token: string) => adminRequest<Source[]>(token, '/admin/sources'),
+  testSource: (token: string, input: ProbeTestInput) => adminRequest<ProbeTestResult>(token, '/admin/sources/test', { method: 'POST', body: JSON.stringify(input) }),
   categories: (token: string) => adminRequest<Category[]>(token, '/admin/categories'),
   tasks: (token: string) => adminRequest<AdminTask[]>(token, '/admin/tasks?limit=100'),
   clearTasks: (token: string) => adminRequest<{ deleted: number }>(token, '/admin/tasks', { method: 'DELETE' }),
