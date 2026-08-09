@@ -1,12 +1,5 @@
--- Current source catalog snapshot generated from the working PostgreSQL data.
--- Runtime status, timestamps, probe history, sessions and secrets are intentionally excluded.
--- This migration is for fresh deployments; existing rows are preserved by the identity guard.
--- Keep this seed migration self-contained. The source-level custom probe flag
--- was originally introduced in a later migration, but this seed includes an
--- explicit false value for every imported source. Creating it here makes a
--- fresh database safe while remaining idempotent for existing installations.
-ALTER TABLE registry_sources
-  ADD COLUMN IF NOT EXISTS probe_config_custom boolean NOT NULL DEFAULT false;
+-- Initial catalog for a fresh installation.
+-- Runtime status, timestamps, probe history, sessions and secrets are not seeded.
 
 WITH seed(category_id, name, base_url, display_url, registry_host, description, provider,
           country, region, operator, tags, is_official, is_cloudflare, is_recommended,
@@ -88,9 +81,4 @@ SELECT
   s.is_enabled, s.priority, s.sort_order, s.maintenance, s.probe_config_custom, s.probe_mode,
   s.test_repository, s.test_tag, s.test_digest, s.request_timeout_seconds, s.download_test_bytes
 FROM seed s
-WHERE NOT EXISTS (
-  SELECT 1 FROM registry_sources existing
-  WHERE existing.category_id = s.category_id
-    AND existing.name = s.name
-    AND existing.base_url = s.base_url
-);
+;

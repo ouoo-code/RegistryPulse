@@ -28,7 +28,7 @@ func TestNotificationRuleAggregationAPI(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if err := database.Migrate(ctx, db, filepath.Join("..", "..", "migrations")); err != nil {
+	if err := database.Initialize(ctx, db, filepath.Join("..", "..", "migrations")); err != nil {
 		t.Fatal(err)
 	}
 

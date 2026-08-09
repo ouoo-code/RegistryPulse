@@ -1,6 +1,6 @@
-.PHONY: help dev build build-frontend build-backend test test-backend test-frontend test-e2e lint format frontend-format validate compose-smoke docker-build docker-up docker-down logs backup restore migrate seed clean
+.PHONY: help dev build build-frontend build-backend test test-backend test-frontend test-e2e lint format frontend-format validate compose-smoke docker-build docker-up docker-down logs backup restore clean
 help:
-	@echo "make dev build test test-backend test-frontend test-e2e lint format validate compose-smoke docker-build docker-up docker-down logs backup restore migrate seed clean"
+	@echo "make dev build test test-backend test-frontend test-e2e lint format validate compose-smoke docker-build docker-up docker-down logs backup restore clean"
 build:
 	$(MAKE) build-frontend
 	$(MAKE) build-backend
@@ -41,9 +41,5 @@ backup:
 restore:
 	@test -n "$(DIR)" || (echo "usage: make restore DIR=backups/YYYY-MM-DD_HH-mm-ss" && exit 2)
 	sh deploy/scripts/restore.sh "$(DIR)"
-migrate:
-	sh deploy/scripts/migrate.sh
-seed:
-	ADMIN_API_TOKEN="$(ADMIN_API_TOKEN)" BASE_URL="$(BASE_URL)" sh deploy/scripts/seed.sh
 clean:
 	docker compose down --remove-orphans

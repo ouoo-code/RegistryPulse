@@ -107,6 +107,8 @@ docker compose up -d
 docker compose ps
 ~~~
 
+This release is designed as a fresh installation. On the first API start, the application creates the complete database schema and inserts the default categories, test images, system settings, and built-in source catalog. It does not include legacy database migrations, backfills, upgrade, or rollback steps. Restarts skip the completed initialization; keep the PostgreSQL volume and use `make backup` after the service starts.
+
 The application release version is stored in the root `VERSION` file. The Compose variable `REGISTRYPULSE_VERSION=latest` selects the Docker Hub image channel; it is not the version displayed by the application.
 
 Open:
@@ -277,10 +279,9 @@ Probe tests use local mock services and fixed responses. They do not depend on t
 
 ~~~text
 RegistryPulse/
-├── backend/                 Go API, Worker, Probe Agent, and database migrations
+├── backend/                 Go API, Worker, Probe Agent, and first-install database schema
 ├── frontend/src/            Vue pages, components, API, and internationalization
 ├── deploy/                  Nginx and deployment scripts
-├── seed/                    Example categories and image source data
 ├── tests/                   API, Compose, frontend, and E2E tests
 ├── .env.example             Environment variable template
 ├── docker-compose.yml       Docker Compose definition

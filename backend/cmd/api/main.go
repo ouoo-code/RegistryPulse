@@ -40,15 +40,12 @@ func main() {
 			slog.Error("database unavailable", "error", err)
 			os.Exit(1)
 		}
-		dir := os.Getenv("MIGRATIONS_DIR")
-		if dir == "" {
+		dir := "/migrations"
+		if _, err = os.Stat(dir); err != nil {
 			dir = "migrations"
 		}
-		if _, err = os.Stat(dir); err != nil {
-			dir = "/migrations"
-		}
-		if err = database.Migrate(ctx, db, dir); err != nil {
-			slog.Error("database migration failed", "error", err)
+		if err = database.Initialize(ctx, db, dir); err != nil {
+			slog.Error("database initialization failed", "error", err)
 			os.Exit(1)
 		}
 		if adminUser, adminPassword := os.Getenv("ADMIN_USERNAME"), os.Getenv("ADMIN_PASSWORD"); adminUser != "" && adminPassword != "" {
@@ -62,7 +59,7 @@ func main() {
 		agents = database.NewAgentRegistry(db)
 		dbClose = func() { _ = db.Close() }
 		defer dbClose()
-		slog.Info("postgres store enabled", "migrations", dir)
+		slog.Info("postgres store enabled", "database_init", dir)
 	}
 	var handler http.Handler
 	var apiServer *httpapi.Server

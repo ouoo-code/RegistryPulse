@@ -99,12 +99,12 @@ func main() {
 			slog.Error("database unavailable", "error", err)
 			os.Exit(1)
 		}
-		dir := os.Getenv("MIGRATIONS_DIR")
-		if dir == "" {
-			dir = "/migrations"
+		dir := "/migrations"
+		if _, err = os.Stat(dir); err != nil {
+			dir = "migrations"
 		}
-		if err = database.Migrate(ctx, db, dir); err != nil {
-			slog.Error("migration failed", "error", err)
+		if err = database.Initialize(ctx, db, dir); err != nil {
+			slog.Error("database initialization failed", "error", err)
 			os.Exit(1)
 		}
 		dbStore := database.NewStore(db)

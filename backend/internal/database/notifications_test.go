@@ -40,7 +40,7 @@ func TestNotifyTransitionAggregation(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if err := Migrate(ctx, db, filepath.Join("..", "..", "migrations")); err != nil {
+	if err := Initialize(ctx, db, filepath.Join("..", "..", "migrations")); err != nil {
 		t.Fatal(err)
 	}
 

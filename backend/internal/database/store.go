@@ -151,8 +151,7 @@ func (s *Store) UpsertSource(in domain.SourceInput, id string) (domain.Source, e
 	now := time.Now().UTC()
 	if id == "" {
 		// Imports do not carry database UUIDs. Reconcile by the stable source
-		// identity so rerunning seed/registry-sources.example.json updates the
-		// existing catalog instead of creating duplicate rows.
+		// identity so an imported source catalog cannot create duplicate rows.
 		lookupErr := s.DB.QueryRow(`SELECT id::text FROM registry_sources WHERE category_id=$1 AND name=$2 AND base_url=$3 ORDER BY id LIMIT 1`, in.CategoryID, in.Name, in.BaseURL).Scan(&id)
 		if lookupErr != nil && lookupErr != sql.ErrNoRows {
 			return domain.Source{}, lookupErr

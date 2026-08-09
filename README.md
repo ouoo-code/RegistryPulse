@@ -102,6 +102,8 @@ docker compose up -d
 docker compose ps
 ~~~
 
+本版本按首次安装处理：API 第一次启动时会创建完整数据库结构并写入默认分类、测试镜像、系统设置和内置镜像源。项目不包含旧版本数据库迁移、回填、升级或回滚步骤；容器重启时会自动跳过已经完成的初始化。正式使用前请保留 PostgreSQL 持久化卷，并按需执行 `make backup`。
+
 应用发布版本存储在项目根目录的 `VERSION` 文件中。Compose 变量
 `REGISTRYPULSE_VERSION=latest` 用于选择 Docker Hub 镜像通道；它不是应用界面显示的版本号。
 
@@ -273,10 +275,9 @@ make compose-smoke
 
 ~~~text
 RegistryPulse/
-├── backend/                 Go API、Worker、Probe Agent、数据库迁移
+├── backend/                 Go API、Worker、Probe Agent、首次安装数据库结构
 ├── frontend/src/            Vue 页面、组件、API 和国际化
 ├── deploy/                  Nginx 与部署脚本
-├── seed/                    示例分类和镜像源数据
 ├── tests/                   API、Compose、前端和 E2E 测试
 ├── .env.example             环境变量模板
 ├── docker-compose.yml       Docker Compose 定义
