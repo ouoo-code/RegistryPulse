@@ -27,10 +27,9 @@ const historyManagement = ref<{ refresh: () => Promise<void> } | null>(null)
 const miscSections = ref<{ refresh: () => Promise<void> } | null>(null)
 const credentialManagement = ref<{ refresh: () => Promise<void> } | null>(null)
 const adminSections = [
-  { key: 'sources', label: 'adminSources' }, { key: 'categories', label: 'adminCategories' }, { key: 'tasks', label: 'adminTasks' }, { key: 'history', label: 'history' },
-  { key: 'nodes', label: 'adminNodes' },
+  { key: 'sources', label: 'adminSources' }, { key: 'tasks', label: 'adminTasks' }, { key: 'history', label: 'history' }, { key: 'nodes', label: 'adminNodes' },
   { key: 'notifications', label: 'adminNotifications' }, { key: 'notification-rules', label: 'adminNotificationRules' },
-  { key: 'users', label: 'adminUsers' }, { key: 'roles', label: 'adminRoles' },
+  { key: 'categories', label: 'adminCategories' },
   { key: 'test-images', label: 'adminTestImages' }, { key: 'credentials', label: 'adminCredentials' }, { key: 'settings', label: 'adminSettings' },
 ] as const satisfies readonly AdminSection[]
 const visibleAdminSections = adminSections.filter(item => item.key !== 'users' && item.key !== 'roles')

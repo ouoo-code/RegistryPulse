@@ -20,9 +20,10 @@ const editorOpen = ref(false)
 const editingId = ref<string | null>(null)
 const form = ref<CategoryInput>(emptyForm())
 function imageAppliesTo(image: TestImage, categoryID: string, probeMode: string) {
-  const categoryIDs = image.category_ids || image.applicable_category_ids || []
-  const probeModes = image.probe_modes || image.applicable_probe_modes || []
-  return (!categoryIDs.length || categoryIDs.includes(categoryID)) && (!probeModes.length || probeModes.includes(probeMode))
+  const categoryIDs = [...(image.category_ids || []), ...(image.applicable_category_ids || [])]
+  const probeModes = [...(image.probe_modes || []), ...(image.applicable_probe_modes || [])]
+  const categoryMatches = !categoryID || !categoryIDs.length || categoryIDs.includes(categoryID)
+  return categoryMatches && (!probeModes.length || probeModes.includes(probeMode))
 }
 const applicableTestImages = computed(() => testImages.value.filter(image => image.enabled && imageAppliesTo(image, form.value.id, form.value.default_probe_mode || 'registry')))
 const displayedCategories = computed(() => [...categories.value].sort((left, right) => {
@@ -108,8 +109,8 @@ defineExpose({ refresh })
       <FormField :label="t.id"><input v-model="form.id" :readonly="Boolean(editingId)" required></FormField>
       <FormField :label="t.name"><input v-model="form.name" required></FormField>
       <FormField :label="t.categoryKey"><input v-model="form.slug" required></FormField>
-      <FormField :label="t.testImage"><select v-model="form.default_test_image_id"><option value="">{{ t.systemDefaultTestImage }}</option><option v-for="image in applicableTestImages" :key="image.id" :value="image.id">{{ image.reference }} · {{ image.max_bytes / 1048576 }} M</option></select></FormField>
       <FormField :label="t.probeMode"><select v-model="form.default_probe_mode"><option value="registry">{{ t.registryProbe }}</option><option value="manifest">{{ t.manifestProbe }}</option><option value="http">{{ t.httpProbe }}</option><option value="docker_pull">{{ t.dockerPullProbe }}</option></select></FormField>
+      <FormField :label="t.testImage"><select v-model="form.default_test_image_id"><option value="">{{ t.systemDefaultTestImage }}</option><option v-for="image in applicableTestImages" :key="image.id" :value="image.id">{{ image.reference }} · {{ image.max_bytes / 1048576 }} M</option></select></FormField>
       <FormField :label="t.defaultTimeout"><input v-model.number="form.default_timeout_seconds" type="number" min="1" max="300" required></FormField>
       <FormField :label="t.description"><input v-model="form.description"></FormField>
       <div class="editor-checks category-editor-checks"><label class="checkbox-field"><input v-model="form.enabled" type="checkbox"><span>{{ t.status }}：{{ form.enabled ? t.enabled : t.disabled }}</span></label></div>
