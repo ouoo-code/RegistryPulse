@@ -242,6 +242,17 @@ docker tag ghcr.example.com/user/image:tag ghcr.io/user/image:tag
 
 The administration console is available at `/admin`. It supports source, category, test image, manual probe, task, history, incident, system settings, password, optional TOTP, import/export, notification, and notification rule management.
 
+Notification channels include Gotify, Webhook, and SMTP Email. Template variables include:
+
+~~~text
+{source_name}
+{event}
+{message}
+{status}
+~~~
+
+Do not commit administrator passwords, tokens, SMTP passwords, or Webhook secrets to Git in production environments.
+
 ### Credential profiles
 
 Credential profiles provide authentication data for registry probes that require access. Three authentication types are available:
@@ -280,17 +291,6 @@ Test-image authentication strategy is separate from credential type:
 - **Authentication required**: fail authentication when no matching credential exists.
 
 Secrets are encrypted at rest and never returned in plaintext. Production deployments must set a random 32-byte `CREDENTIAL_ENCRYPTION_KEY` and back it up securely.
-
-Notification channels include Gotify, Webhook, and SMTP Email. Template variables include:
-
-~~~text
-{source_name}
-{event}
-{message}
-{status}
-~~~
-
-Do not commit administrator passwords, tokens, SMTP passwords, or Webhook secrets to Git in production environments.
 
 ## API and Observability
 

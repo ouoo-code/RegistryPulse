@@ -238,6 +238,17 @@ docker tag ghcr.example.com/user/image:tag ghcr.io/user/image:tag
 
 管理后台位于 /admin，支持镜像源、分类、测试镜像、手动探测、任务、历史、故障事件、系统设置、密码、可选 TOTP、导入导出、通知和通知规则管理。
 
+通知通道支持 Gotify、Webhook 和 SMTP Email。模板变量包括：
+
+~~~text
+{source_name}
+{event}
+{message}
+{status}
+~~~
+
+生产环境不要把管理员密码、Token、SMTP 密码或 Webhook 密钥提交到 Git。
+
 ### 凭证配置
 
 凭证配置用于为需要认证的镜像源探测提供登录信息，支持三种认证类型：
@@ -276,17 +287,6 @@ GHCR：Bearer Token，用户名留空，密钥为 GitHub Personal Access Token�
 - **必须认证**：没有匹配凭证时直接判定认证失败。
 
 凭证密钥不会明文保存，使用 `CREDENTIAL_ENCRYPTION_KEY` 加密存储。生产环境必须设置随机的 32 字节加密密钥，并妥善备份。
-
-通知通道支持 Gotify、Webhook 和 SMTP Email。模板变量包括：
-
-~~~text
-{source_name}
-{event}
-{message}
-{status}
-~~~
-
-生产环境不要把管理员密码、Token、SMTP 密码或 Webhook 密钥提交到 Git。
 
 ## API 与可观测性
 
