@@ -95,6 +95,14 @@ func ValidateTarget(raw string, allowPrivate bool) error {
 	}
 	return nil
 }
+
+// ResolveHost resolves a target immediately and applies the same private
+// address policy used by the probe engine. Proxy connections use this helper
+// to pin a request to the checked address set and reduce DNS rebinding risk.
+func ResolveHost(ctx context.Context, host string, allowPrivate bool) ([]net.IP, error) {
+	return resolveHost(ctx, host, allowPrivate)
+}
+
 func isPrivateHost(host string) bool {
 	h := strings.ToLower(host)
 	if h == "localhost" || strings.HasSuffix(h, ".localhost") || h == "metadata.google.internal" {
@@ -104,7 +112,13 @@ func isPrivateHost(host string) bool {
 	if ip == nil {
 		return false
 	}
-	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast()
+	if ip4 := ip.To4(); ip4 != nil {
+		ip = ip4
+		if ip4[0] == 100 && ip4[1] >= 64 && ip4[1] <= 127 {
+			return true
+		}
+	}
+	return !ip.IsGlobalUnicast() || ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsUnspecified() || ip.IsMulticast()
 }
 
 func Run(ctx context.Context, raw string, timeout time.Duration) Result {

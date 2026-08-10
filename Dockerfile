@@ -9,7 +9,8 @@ WORKDIR /src/backend
 RUN go mod download
 COPY backend/ .
 RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/api ./cmd/api \
-    && CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/worker ./cmd/worker
+    && CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/worker ./cmd/worker \
+    && CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/registry-proxy ./cmd/registry-proxy
 
 FROM ${BASE_REGISTRY}/node:22-alpine AS frontend-build
 ARG APP_VERSION=dev
@@ -25,6 +26,7 @@ RUN addgroup -S app && adduser -S -G app app \
     && apk add --no-cache ca-certificates
 COPY --from=backend-build /out/api /api
 COPY --from=backend-build /out/worker /worker
+COPY --from=backend-build /out/registry-proxy /registry-proxy
 COPY backend/migrations /migrations
 COPY --from=frontend-build /app/dist /usr/share/nginx/html
 COPY frontend/nginx.conf /etc/nginx/registrypulse/frontend.conf

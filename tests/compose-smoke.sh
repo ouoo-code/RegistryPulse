@@ -28,4 +28,5 @@ done
 curl --fail --silent --show-error http://127.0.0.1/health >/dev/null
 curl --fail --silent --show-error http://127.0.0.1/api/v1/health >/dev/null
 curl --fail --silent --show-error http://127.0.0.1/ >/dev/null
+curl --fail --silent --show-error http://127.0.0.1:10800/health/live >/dev/null
 echo "Compose smoke test passed."

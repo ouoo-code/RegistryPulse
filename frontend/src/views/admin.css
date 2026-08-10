@@ -282,12 +282,12 @@
 .settings-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .settings-actions .icon-button, .settings-actions .refresh { padding: 7px 10px; border-radius: 8px; font-size: 12px; line-height: 1.4; }
 .settings-secret-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
-.settings-advanced { grid-column: auto; }
-.settings-option-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.settings-advanced { grid-column: 1 / -1; }
+.settings-option-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .settings-option-card { min-width: 0; padding: 14px; border: 1px solid #d9e2ec; border-radius: 10px; background: #f8fafc; }
 .settings-option-card h3 { margin: 0; color: #31485f; font-size: 13px; font-weight: 600; }
 .settings-option-card p { min-height: 36px; margin: 7px 0 10px; color: #8491a0; font-size: 11px; line-height: 1.5; }
-.settings-option-card > input { width: 100%; box-sizing: border-box; padding: 9px 10px; border: 1px solid #d9e2ec; border-radius: 8px; background: #fff; color: #24374f; font: inherit; }
+.settings-option-card > input, .settings-option-card > select { width: 100%; box-sizing: border-box; padding: 9px 10px; border: 1px solid #d9e2ec; border-radius: 8px; background: #fff; color: #24374f; font: inherit; }
 .settings-public-option .settings-toggle { width: 100%; box-sizing: border-box; justify-content: flex-start; }
 .settings-other-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
 .settings-footer { display: flex; justify-content: flex-end; margin-top: 14px; }
@@ -297,6 +297,26 @@
 .settings-toggle input::after { content: ''; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px #14223544; transition: .18s ease; }
 .settings-toggle input:checked { background: #2468e8; }
 .settings-toggle input:checked::after { transform: translateX(14px); }
+.proxy-settings-card { grid-column: 1 / -1; }
+.proxy-status-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 9px; border: 1px solid #d9e2ec; border-radius: 999px; color: #718095; font-size: 12px; white-space: nowrap; }
+.proxy-status-chip i { width: 7px; height: 7px; border-radius: 50%; background: #9aa7b5; }
+.proxy-status-chip.ready { border-color: #b7e5d2; color: #168451; }
+.proxy-status-chip.ready i { background: #22bd78; box-shadow: 0 0 0 3px #22bd7822; }
+.proxy-status-chip.disabled { border-color: #f0caca; color: #b04b4b; }
+.proxy-status-chip.disabled i { background: #e06464; }
+.proxy-status-row { display: flex; align-items: center; gap: 12px; min-height: 42px; margin-bottom: 12px; padding: 8px 10px; border: 1px solid #d9e2ec; border-radius: 9px; color: #657589; font-size: 12px; }
+.proxy-status-row span:first-child { flex: 1; }
+.proxy-status-row .refresh { flex: 0 0 auto; padding: 7px 10px; border-radius: 8px; font-size: 12px; }
+.proxy-settings-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.proxy-settings-grid .proxy-forward-only-card { order: 3; }
+.proxy-settings-grid .proxy-category-card { order: 6; }
+.proxy-settings-grid .proxy-route-age-card { order: 7; }
+.proxy-settings-grid .proxy-cooldown-card { order: 8; }
+.proxy-forward-only-card.is-locked { opacity: .62; }
+.proxy-forward-only-card.is-locked input:disabled { cursor: not-allowed; }
+.proxy-settings-grid .settings-option-card { min-height: 142px; }
+.proxy-enable-card .settings-toggle { width: 100%; box-sizing: border-box; justify-content: flex-start; }
+.proxy-restart-warning { margin: 12px 0 0; padding: 9px 11px; border: 1px solid #f0c78a; border-radius: 8px; background: #fff8eb; color: #906320; font-size: 12px; line-height: 1.5; }
 .setting-row label { display: grid; gap: 6px; color: #657589; font-size: 13px; }
 .setting-row input { border: 1px solid #d9e2ec; border-radius: 8px; padding: 10px; font: inherit; }
 .admin-resource-section pre { overflow: auto; margin-top: 20px; padding: 16px; border-radius: 9px; background: #14202b; color: #d9e6f2; }
@@ -359,7 +379,12 @@
 .dark .settings-option-card { border-color: #354657; background: #18232e; }
 .dark .settings-option-card h3 { color: #eef4fb; }
 .dark .settings-option-card p { color: #aab7c5; }
-.dark .settings-option-card > input { border-color: #354657; background: #202d3a; color: #eef4fb; }
+.dark .settings-option-card > input, .dark .settings-option-card > select { border-color: #354657; background: #202d3a; color: #eef4fb; }
+.dark .proxy-status-chip { border-color: #354657; color: #aab7c5; }
+.dark .proxy-status-chip.ready { border-color: #28794f; color: #67dfa0; }
+.dark .proxy-status-chip.disabled { border-color: #814545; color: #ff9696; }
+.dark .proxy-status-row { border-color: #354657; background: #18232e; color: #aab7c5; }
+.dark .proxy-restart-warning { border-color: #80612d; background: #332a1b; color: #f1c873; }
 .dark .notification-template-help { border-color: #354657; background: #202d3a; color: #aab7c5; }
 .dark .notification-template-help strong { color: #eef4fb; }
 @media (max-width: 900px) {
@@ -374,6 +399,8 @@
   .test-image-editor-basics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .test-image-editor-basics .form-field-image-reference { grid-column: 1 / -1; }
   .settings-layout { grid-template-columns: 1fr; }
+  .settings-option-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .proxy-settings-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 620px) {
   .admin-standalone-header { padding: 0 16px; }
@@ -408,5 +435,6 @@
   .test-image-editor-footer { align-items: stretch; flex-direction: column; }
   .test-image-editor-footer .editor-form-actions { justify-content: flex-end; }
   .base-table { padding-left: 12px; padding-right: 12px; }
-  .settings-layout, .settings-option-grid, .settings-other-grid, .settings-secret-grid { grid-template-columns: 1fr; }
+  .settings-layout, .settings-option-grid, .settings-other-grid, .settings-secret-grid, .proxy-settings-grid { grid-template-columns: 1fr; }
+  .proxy-status-row { align-items: flex-start; flex-wrap: wrap; }
 }

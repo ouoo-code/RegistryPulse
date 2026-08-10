@@ -49,9 +49,11 @@ flowchart LR
     Worker --> Registry[外部容器镜像 Registry]
     Agent[可选 Probe Agent] --> API
     Agent --> Registry
+    Proxy[独立 registry-proxy] --> Redis
+    Proxy --> Registry
 ~~~
 
-单机模式下，API、Worker、前端、Nginx、PostgreSQL 和 Redis 运行在同一个 Compose 项目中。探测节点 Agent 的注册、心跳、任务拉取和结果上报接口已预留，可用于扩展多地区探测部署。
+单机模式下，API、Worker、前端、Nginx、PostgreSQL、Redis 和独立的 registry-proxy 运行在同一个 Compose 项目中。探测节点 Agent 的注册、心跳、任务拉取和结果上报接口已预留，可用于扩展多地区探测部署。
 
 
 ![前台界面](rp-1.png)
@@ -138,6 +140,7 @@ Compose 项目技术名为 **registrypulse**。
 | frontend | 构建并提供 Vue 静态前端 |
 | api | Go REST API、认证、管理和公开查询 |
 | worker | 调度探测任务并保存检测结果 |
+| proxy | 在 10800 端口提供 Docker Registry 只读实时转发 |
 | postgres | 保存镜像源、任务、历史、故障和通知数据 |
 | redis | 缓存、任务锁和调度协调 |
 
@@ -151,6 +154,24 @@ Compose 项目技术名为 **registrypulse**。
 ~~~bash
 docker compose down -v
 ~~~
+
+### Registry Proxy 实时转发
+
+`registry-proxy` 是独立的数据面入口，默认监听宿主机 `10800` 端口。第一阶段固定为 Docker Hub 类别，按 API/Worker 写入 Redis 的健康路由快照选择启用、非维护、最近探测成功的源，并在上游连接或 5xx 失败时有限度切换备用源。
+
+代理当前只允许 `GET`、`HEAD` 和 Docker Registry 的 `/v2/`、Manifest、Blob 路径，默认关闭 push、delete 和 upload。开发环境可以使用：
+
+~~~text
+http://localhost:10800
+~~~
+
+生产环境应使用真实域名和受信任的 HTTPS 证书；`https://localhost:10800` 不是自动提供的 TLS 入口。
+
+代理不会缓存镜像内容：Manifest、Manifest List、config blob、layer blob 和 OCI Artifact 都使用流式实时转发，不写入 PostgreSQL、Redis、宿主机目录或容器文件系统。Redis 只保存路由/健康快照，允许 HTTP 连接池和短期进程状态。大响应不会为了缓存命中而改变 digest、Range、MediaType、Content-Length 或状态码。
+
+可调整的环境变量包括 `PROXY_CATEGORY_ID`、`PROXY_UPSTREAMS`、`PROXY_ROUTE_MAX_AGE`、`PROXY_MAX_CONCURRENT`、`PROXY_MAX_RANGE_BYTES`、`PROXY_MAX_MANIFEST_BYTES` 和 `PROXY_REDIRECT_HOSTS`。未配置健康快照时，显式配置的 `PROXY_UPSTREAMS` 作为回退上游；不能通过请求参数改变上游地址。
+
+首次实现暂不把认证密码放入路由快照，也不把客户端 `Authorization` 原样转发到备用源。需要私有仓库认证时，应先在凭证配置中完成 host/类别绑定，再扩展代理的 host-bound Bearer/Basic 凭证模块。
 
 ## 镜像源探测
 
@@ -366,6 +387,19 @@ RegistryPulse/
 当前版本重点完成了单机部署、真实镜像源探测、状态历史、配置生成、管理后台和通知能力。
 
 后续可继续完善多地区探测节点的生产级部署、更多 Registry 厂商的专用鉴权策略、历史数据聚合、更完整的容器运行时 Pull 探测隔离、细粒度 RBAC、Grafana 模板和更完整的 OpenAPI 客户端。
+
+### Registry Proxy 后台管理
+
+管理员可以在“设置 → Registry Proxy”中管理代理控制面。页面显示代理进程心跳、就绪状态、实际监听端口、配置端口、镜像源类别和当前健康候选源数量。启用开关支持热更新；关闭后进程仍保持运行，但 Registry 请求会返回 `PROXY_DISABLED`。
+
+镜像源类别、路由快照有效期、失败冷却、最大并发、Range 上限和 Manifest 上限会保存到 PostgreSQL，并通过 Redis 控制快照下发，修改后无需替换容器即可生效。监听端口由 Docker Compose 管理，不属于后台运行时设置；如需修改对外端口，请直接编辑 `docker-compose.yml` 中 `proxy.ports` 和 `PROXY_HTTP_PORT`，然后重启 `registry-proxy` 服务。
+
+“流量处理方式”支持两种模式：
+
+- **转发流量**：代理读取并流式转发上游响应，适合需要统一鉴权、故障切换和请求控制的场景。
+- **重定向流量**：代理只选择健康源并返回 `307 Location`，Docker 客户端随后直接从上游读取镜像内容，主体流量不会经过本机；适合公开可直接访问的镜像源。该模式不提供代理侧的统一鉴权和响应级故障切换。
+
+两种模式都只允许受控的 Registry/OCI 路径，并继续执行目标地址校验；重定向不是开放任意 URL 的跳转服务。
 
 ## 许可证
 

@@ -13,6 +13,7 @@ import (
 	"github.com/ouoo-code/RegistryPulse/internal/database"
 	"github.com/ouoo-code/RegistryPulse/internal/domain"
 	httpapi "github.com/ouoo-code/RegistryPulse/internal/http"
+	"github.com/ouoo-code/RegistryPulse/internal/proxy"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -88,6 +89,8 @@ func main() {
 			}
 			return redisClient.Ping(checkCtx).Err()
 		})
+		apiServer.SetRedisClient(redisClient)
+		proxy.StartSnapshotPublisher(context.Background(), redisClient, store, snapshotInterval())
 	}
 	handler = apiServer.Routes()
 	srv := &http.Server{Addr: ":" + port, Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
@@ -96,4 +99,16 @@ func main() {
 		slog.Error("server stopped", "error", err)
 		os.Exit(1)
 	}
+}
+
+func snapshotInterval() time.Duration {
+	if raw := os.Getenv("PROXY_SNAPSHOT_INTERVAL"); raw != "" {
+		if seconds, err := strconv.Atoi(raw); err == nil && seconds > 0 {
+			return time.Duration(seconds) * time.Second
+		}
+		if duration, err := time.ParseDuration(raw); err == nil && duration > 0 {
+			return duration
+		}
+	}
+	return 5 * time.Second
 }

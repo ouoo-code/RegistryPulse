@@ -24,6 +24,7 @@ import (
 	"github.com/ouoo-code/RegistryPulse/internal/domain"
 	metricspkg "github.com/ouoo-code/RegistryPulse/internal/metrics"
 	"github.com/ouoo-code/RegistryPulse/internal/probe"
+	"github.com/redis/go-redis/v9"
 )
 
 type Server struct {
@@ -39,6 +40,7 @@ type Server struct {
 	rateMu         sync.Mutex
 	rateRequests   map[string][]time.Time
 	readyCheck     func(context.Context) error
+	redis          redis.UniversalClient
 }
 
 func New(store domain.Store, sessions ...*auth.SessionStore) *Server {
@@ -60,6 +62,8 @@ func NewWithAgentRegistry(store domain.Store, sessions *auth.SessionStore, agent
 // dependencies (PostgreSQL, Redis and task dispatch) in /health/ready without
 // coupling the HTTP package to a particular deployment.
 func (s *Server) SetReadinessChecker(check func(context.Context) error) { s.readyCheck = check }
+
+func (s *Server) SetRedisClient(client redis.UniversalClient) { s.redis = client }
 
 type loginFailure struct {
 	Count int
@@ -95,6 +99,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("/api/v1/admin/probes", s.adminProbes)
 	mux.HandleFunc("/api/v1/admin/probes/", s.adminProbes)
 	mux.HandleFunc("/api/v1/admin/settings", s.adminSettings)
+	mux.HandleFunc("/api/v1/admin/proxy", s.adminProxy)
 	mux.HandleFunc("/api/v1/admin/totp", s.adminTOTP)
 	mux.HandleFunc("/api/v1/admin/test-images", s.adminTestImages)
 	mux.HandleFunc("/api/v1/admin/test-images/", s.adminTestImages)

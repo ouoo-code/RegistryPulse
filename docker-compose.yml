@@ -65,6 +65,30 @@ services:
     healthcheck: {test: ["CMD-SHELL", "kill -0 1"], interval: 10s, timeout: 5s, retries: 5}
     networks: [backend]
     logging: *default-logging
+  proxy:
+    image: *app-image
+    build: *app-build
+    restart: unless-stopped
+    user: app
+    entrypoint: ["/registry-proxy"]
+    env_file: [.env]
+    environment:
+      PROXY_HTTP_PORT: "10800"
+      PROXY_REDIS_URL: "${PROXY_REDIS_URL:-redis://redis:6379/0}"
+      PROXY_CATEGORY_ID: "${PROXY_CATEGORY_ID:-dockerhub}"
+      PROXY_UPSTREAMS: "${PROXY_UPSTREAMS:-}"
+    depends_on: {redis: {condition: service_healthy}}
+    ports: ["10800:10800"]
+    read_only: true
+    tmpfs: ["/tmp:size=16m,noexec,nosuid,nodev"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:$${PROXY_HTTP_PORT}/health/live"]
+      interval: 10s
+      timeout: 5s
+      start_period: 5s
+      retries: 5
+    networks: [backend]
+    logging: *default-logging
   frontend:
     image: *app-image
     build: *app-build

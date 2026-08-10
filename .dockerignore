@@ -9,5 +9,9 @@ backups
 **/dist
 **/.npm-cache
 **/.tools
+**/.gocache*
+**/.gomodcache*
+**/.gopath*
+**/.gotmp*
 *.log
 *.tmp

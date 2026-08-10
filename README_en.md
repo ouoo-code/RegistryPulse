@@ -48,9 +48,11 @@ flowchart LR
     Worker --> Registry[External Container Registry]
     Agent[Optional Probe Agent] --> API
     Agent --> Registry
+    Proxy[Independent registry-proxy] --> Redis
+    Proxy --> Registry
 ~~~
 
-In single-host mode, the API, Worker, frontend, Nginx, PostgreSQL, and Redis run in the same Compose project. Registration, heartbeat, task polling, and result reporting APIs for probe agents are reserved for future multi-region deployments.
+In single-host mode, the API, Worker, frontend, Nginx, PostgreSQL, Redis, and the independent registry-proxy run in the same Compose project. Registration, heartbeat, task polling, and result reporting APIs for probe agents are reserved for future multi-region deployments.
 
 ![Frontend](rp-1.png)
 
@@ -142,6 +144,7 @@ The Compose project name is **registrypulse**.
 | frontend | Builds and serves the Vue static frontend |
 | api | Go REST API, authentication, administration, and public queries |
 | worker | Schedules probe tasks and stores probe results |
+| proxy | Provides read-only real-time Docker Registry forwarding on port 10800 |
 | postgres | Stores sources, tasks, history, incidents, and notification data |
 | redis | Caching, task locks, and scheduling coordination |
 
@@ -155,6 +158,37 @@ Do not run the following command casually, because it deletes the database volum
 ~~~bash
 docker compose down -v
 ~~~
+
+### Registry Proxy real-time forwarding
+
+`registry-proxy` is an independent data-plane entry point and exposes host port `10800` by default. The first phase is fixed to the Docker Hub category. It reads the health route snapshot published by the API/Worker, selects enabled, non-maintenance, recently successful sources, and performs bounded failover when an upstream connection or 5xx response fails.
+
+The proxy allows only `GET`, `HEAD`, and Docker Registry `/v2/`, manifest, and blob paths. Push, delete, and upload operations are disabled by default. For local development:
+
+~~~text
+http://localhost:10800
+~~~
+
+Production deployments should use a real hostname and a trusted HTTPS certificate; `https://localhost:10800` is not automatically a TLS endpoint.
+
+The proxy does not cache image content. Manifests, manifest lists, config blobs, layer blobs, and OCI artifacts are streamed directly from the current upstream and are not written to PostgreSQL, Redis, a host directory, or the container filesystem. Redis stores only route/health snapshots; HTTP connection pooling and short-lived in-process state are allowed. Large responses do not change digest, Range, media type, Content-Length, or status code for cache hits.
+
+Relevant environment variables include `PROXY_CATEGORY_ID`, `PROXY_UPSTREAMS`, `PROXY_ROUTE_MAX_AGE`, `PROXY_MAX_CONCURRENT`, `PROXY_MAX_RANGE_BYTES`, `PROXY_MAX_MANIFEST_BYTES`, and `PROXY_REDIRECT_HOSTS`. When no healthy snapshot exists, explicitly configured `PROXY_UPSTREAMS` is used as the fallback; clients cannot change the upstream through request parameters.
+
+The first implementation does not put passwords in route snapshots and does not relay a client `Authorization` header to a failover source. Private registry authentication should first be bound by host/category in Credential Profiles, then be extended with a host-bound Bearer/Basic credential module.
+
+### Registry Proxy administration
+
+Administrators can open **Settings → Registry Proxy** to manage the proxy control plane. The page shows the process heartbeat, readiness, actual listening port, configured port, category, and the number of healthy candidate sources. The enable switch is hot-applied: when disabled, the process remains alive but returns `PROXY_DISABLED` for Registry requests.
+
+The category, route snapshot age, failure cooldown, concurrency limit, Range limit, and Manifest limit are stored in PostgreSQL and delivered through the Redis control snapshot. They take effect without replacing the container. The listen port is owned by Docker Compose and is not a runtime admin setting. To change the external port, edit `proxy.ports` and `PROXY_HTTP_PORT` in `docker-compose.yml`, then restart the `registry-proxy` service.
+
+The **Traffic mode** setting supports two modes:
+
+- **Forward traffic**: the proxy reads and streams the upstream response through this host, which is suitable for unified authentication, failover, and request controls.
+- **Redirect traffic**: the proxy selects a healthy source and returns a `307 Location`; the Docker client then reads image content directly from the upstream, so the main traffic bypasses this host. This mode does not provide proxy-side unified authentication or response-level failover.
+
+Both modes allow only controlled Registry/OCI paths and keep upstream target validation enabled. Redirect mode is not an open URL redirector.
 
 ## Image Source Probing
 

@@ -79,6 +79,36 @@ export type CredentialProfileInput = {
   enabled?: boolean
 }
 export type AdminSettings = Record<string, unknown>
+export type ProxyConfig = {
+  enabled: boolean
+  transport_mode: 'forward' | 'redirect'
+  category_id: string
+  route_max_age_minutes: number
+  failure_cooldown_seconds: number
+  max_concurrent: number
+  max_range_mb: number
+  max_manifest_mb: number
+  updated_at?: string
+}
+export type ProxyStatus = {
+  running: boolean
+  enabled: boolean
+  transport_mode?: 'forward' | 'redirect'
+  ready: boolean
+  actual_port: number
+  configured_port: number
+  category_id: string
+  candidate_count: number
+  last_error?: string
+  started_at?: string
+  last_seen_at?: string
+}
+export type AdminProxy = {
+  config: ProxyConfig
+  status: ProxyStatus
+  status_available: boolean
+  control_snapshot_published: boolean
+}
 export type TotpSettings = { enabled: boolean; configured?: boolean; secret?: string; otpauth_uri?: string }
 export type AggregatePoint = { bucket: string; samples: number; online_samples: number; avg_duration_ms: number }
 export type SourceAggregates = { hourly: AggregatePoint[]; daily: AggregatePoint[] }

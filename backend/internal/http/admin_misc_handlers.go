@@ -251,6 +251,9 @@ func (s *Server) adminSettings(w http.ResponseWriter, r *http.Request) {
 			var key string
 			var value []byte
 			if rows.Scan(&key, &value) == nil {
+				if strings.HasPrefix(key, "proxy_") {
+					continue
+				}
 				out[key] = json.RawMessage(value)
 			}
 		}
@@ -267,6 +270,10 @@ func (s *Server) adminSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for key, value := range input {
+		if strings.HasPrefix(key, "proxy_") {
+			writeError(w, http.StatusBadRequest, "USE_PROXY_SETTINGS", "use the registry proxy settings endpoint")
+			return
+		}
 		payload, err := json.Marshal(value)
 		if err != nil {
 			writeError(w, 400, "INVALID_SETTING", "invalid setting")

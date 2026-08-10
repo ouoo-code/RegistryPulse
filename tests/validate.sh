@@ -22,6 +22,9 @@ check "nginx API upstream placeholder" grep -Fq 'set $api_upstream api:__API_HTT
 check "nginx API proxy" grep -Fq 'proxy_pass http://$api_upstream' deploy/nginx/default.conf
 check "forwarded protocol header" grep -Fq 'proxy_set_header X-Forwarded-Proto' deploy/nginx/default.conf
 check "nginx proxy timeout" grep -Fq 'proxy_connect_timeout' deploy/nginx/default.conf
+check "registry proxy service" grep -Fq 'proxy:' docker-compose.yml
+check "registry proxy binary" grep -Fq 'registry-proxy' Dockerfile
+check "registry proxy is read-only" grep -Fq 'push and mutation requests are disabled' backend/internal/proxy/handler.go
 
 for script in deploy/scripts/backup.sh deploy/scripts/restore.sh; do
   check "$script has valid shell syntax" sh -n "$script"

@@ -3,10 +3,18 @@ set -eu
 
 mode="${REGISTRYPULSE_MODE:-frontend}"
 api_port="${API_HTTP_PORT:-8080}"
+proxy_port="${PROXY_HTTP_PORT:-10800}"
 
 case "$api_port" in
   ''|*[!0-9]*)
     echo "invalid API_HTTP_PORT: $api_port" >&2
+    exit 64
+    ;;
+esac
+
+case "$proxy_port" in
+  ''|*[!0-9]*)
+    echo "invalid PROXY_HTTP_PORT: $proxy_port" >&2
     exit 64
     ;;
 esac
@@ -17,6 +25,9 @@ case "$mode" in
     ;;
   worker)
     exec /worker "$@"
+    ;;
+  proxy)
+    exec /registry-proxy "$@"
     ;;
   frontend)
     config=/etc/nginx/registrypulse/frontend.conf
