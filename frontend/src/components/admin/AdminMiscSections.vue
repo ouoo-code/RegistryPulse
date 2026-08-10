@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
 import { adminApi, adminRequest } from '../../admin-api'
-import { type AdminRole, type AdminSettings, type AdminUser, type Category, type NotificationChannel, type NotificationRule, type ProbeNode, type TestImage, type TestImageInput, type TotpSettings } from '../../api'
+import { type AdminRole, type AdminRoleInput, type AdminSettings, type AdminUser, type AdminUserInput, type Category, type NotificationChannel, type NotificationRule, type ProbeNode, type TestImage, type TestImageInput } from '../../api'
 import { useI18n } from '../../i18n'
 import BaseDialog from '../BaseDialog.vue'
 import BaseTable from '../BaseTable.vue'
@@ -10,22 +10,28 @@ import { formatDateTime } from '../../time'
 import AdminNotificationManagement from './AdminNotificationManagement.vue'
 import AdminNotificationRuleManagement from './AdminNotificationRuleManagement.vue'
 import AdminSettingsManagement from './AdminSettingsManagement.vue'
+import { useAccessCopy } from '../../access-copy'
 
 const props = defineProps<{ token: string; section: string }>()
 const emit = defineEmits<{ error: [message: string]; notice: [message: string] }>()
 const { t } = useI18n()
+const accessCopy = useAccessCopy()
 const nodes = ref<ProbeNode[]>([])
 const users = ref<AdminUser[]>([])
 const roles = ref<AdminRole[]>([])
+const userEditorOpen = ref(false)
+const roleEditorOpen = ref(false)
+const editingUserID = ref<string | null>(null)
+const editingRoleName = ref<string | null>(null)
+const userForm = ref<AdminUserInput>({ username: '', password: '', role: 'viewer', active: true })
+const roleForm = ref<AdminRoleInput>({ name: '', permissions: [] })
+const permissionOptions = ['source.read', 'source.write', 'probe.read', 'probe.write', 'incident.read', 'settings.read', 'settings.write', 'audit.read', 'agent.manage']
 const notifications = ref<NotificationChannel[]>([])
 const notificationRules = ref<NotificationRule[]>([])
 const testImages = ref<TestImage[]>([])
 const categories = ref<Category[]>([])
 const settings = ref<AdminSettings>({})
 const settingEntries = ref<Array<{ key: string; value: string }>>([])
-const totp = ref<TotpSettings>({ enabled: false, secret: '' })
-const totpSecret = ref('')
-const totpCode = ref('')
 const probeIntervalMinutes = ref(5)
 type TestImageForm = Omit<TestImageInput, 'max_bytes'> & { max_mib: number }
 const probeModes = ['registry', 'manifest', 'http', 'docker_pull'] as const
@@ -46,7 +52,11 @@ const fail = (error: unknown, fallback: string) => emit('error', error instanceo
 async function refresh() {
   try {
     if (props.section === 'nodes') nodes.value = await adminApi.nodes(props.token)
-    if (props.section === 'users') users.value = await adminApi.users(props.token)
+    if (props.section === 'users') {
+      const [userList, roleList] = await Promise.all([adminApi.users(props.token), adminApi.roles(props.token)])
+      users.value = userList
+      roles.value = roleList
+    }
     if (props.section === 'roles') roles.value = await adminApi.roles(props.token)
     if (props.section === 'notifications') notifications.value = await adminApi.notifications(props.token)
     if (props.section === 'notification-rules') notificationRules.value = await adminApi.notificationRules(props.token)
@@ -57,14 +67,30 @@ async function refresh() {
     }
     if (props.section === 'settings') {
       settings.value = await adminApi.settings(props.token)
-      totp.value = await adminApi.totp(props.token)
-      totpSecret.value = totp.value.secret || ''
       const rawInterval = settings.value.probe_interval_minutes
       const intervalValue = typeof rawInterval === 'object' && rawInterval !== null && 'value' in rawInterval ? rawInterval.value : rawInterval
       probeIntervalMinutes.value = Number(intervalValue) || 5
       settingEntries.value = Object.entries(settings.value).filter(([key]) => key !== 'probe_interval_minutes').map(([key, value]) => ({ key, value: typeof value === 'string' ? value : JSON.stringify(value) }))
     }
   } catch (error) { fail(error, t.value.apiError) }
+}
+function parseList(value: string[] | string | undefined) {
+  return Array.isArray(value) ? value : (value || '').split(',').map(item => item.trim()).filter(Boolean)
+}
+function openUserCreate() { editingUserID.value = null; userForm.value = { username: '', password: '', role: 'viewer', active: true }; userEditorOpen.value = true }
+function openUserEdit(user: AdminUser) { editingUserID.value = user.id; userForm.value = { username: user.username, password: '', role: parseList(user.roles)[0] || 'viewer', active: user.active !== false }; userEditorOpen.value = true }
+function openRoleCreate() { editingRoleName.value = null; roleForm.value = { name: '', permissions: [] }; roleEditorOpen.value = true }
+function openRoleEdit(role: AdminRole) { editingRoleName.value = role.name; roleForm.value = { name: role.name, permissions: parseList(role.permissions) }; roleEditorOpen.value = true }
+async function saveUser() {
+  const payload = { ...userForm.value, username: userForm.value.username.trim(), password: userForm.value.password || undefined }
+  try { if (editingUserID.value) await adminApi.updateUser(props.token, editingUserID.value, payload); else await adminApi.createUser(props.token, payload); userEditorOpen.value = false; emit('notice', t.value.saveSuccess); await refresh() } catch (error) { fail(error, accessCopy.value.userSaveError) }
+}
+async function toggleUser(user: AdminUser) {
+  try { await adminApi.updateUser(props.token, user.id, { username: user.username, role: parseList(user.roles)[0] || 'viewer', active: user.active === false }); emit('notice', t.value.saveSuccess); await refresh() } catch (error) { fail(error, accessCopy.value.userSaveError) }
+}
+async function saveRole() {
+  const payload = { name: roleForm.value.name.trim(), permissions: [...roleForm.value.permissions] }
+  try { if (editingRoleName.value) await adminApi.updateRole(props.token, editingRoleName.value, payload); else await adminApi.createRole(props.token, payload); roleEditorOpen.value = false; emit('notice', t.value.saveSuccess); await refresh() } catch (error) { fail(error, accessCopy.value.roleSaveError) }
 }
 async function testNotification(id: string) { try { await adminRequest<void>(props.token, `/admin/notifications/${id}/test`, { method: 'POST' }); emit('notice', t.value.probeQueued) } catch (error) { fail(error, t.value.notificationTestError) } }
 function openImageCreate() {
@@ -116,9 +142,18 @@ async function removeImage(id: string) {
   try { await adminRequest<void>(props.token, `/admin/test-images/${encodeURIComponent(id)}`, { method: 'DELETE' }); emit('notice', t.value.deleteSuccess); await refresh() } catch (error) { fail(error, t.value.testImageDeleteError) }
 }
 async function saveSettings() { try { const payload: AdminSettings = { probe_interval_minutes: Math.max(1, Math.min(1440, Math.round(probeIntervalMinutes.value))) }; for (const entry of settingEntries.value) { try { payload[entry.key] = JSON.parse(entry.value) } catch { payload[entry.key] = entry.value } } await adminRequest<void>(props.token, '/admin/settings', { method: 'PUT', body: JSON.stringify(payload) }); emit('notice', t.value.saveSuccess); await refresh() } catch (error) { fail(error, t.value.settingsSaveError) } }
-async function generateTOTP() { try { const result = await adminRequest<TotpSettings>(props.token, '/admin/totp', { method: 'POST', body: JSON.stringify({ action: 'generate' }) }); totp.value = result; totpSecret.value = result.secret || ''; emit('notice', t.value.saveSuccess) } catch (error) { fail(error, t.value.apiError) } }
-async function enableTOTP() { try { await adminRequest<void>(props.token, '/admin/totp', { method: 'POST', body: JSON.stringify({ action: 'enable', secret: totpSecret.value, code: totpCode.value }) }); totp.value.enabled = true; totpCode.value = ''; emit('notice', t.value.saveSuccess) } catch (error) { fail(error, t.value.apiError) } }
-async function disableTOTP() { try { await adminRequest<void>(props.token, '/admin/totp', { method: 'POST', body: JSON.stringify({ action: 'disable', code: totpCode.value }) }); totp.value.enabled = false; totpCode.value = ''; emit('notice', t.value.saveSuccess) } catch (error) { fail(error, t.value.apiError) } }
+async function deleteUser(user: AdminUser) {
+  if (user.active !== false || !confirm(t.value.confirmDelete)) return
+  try { await adminApi.deleteUser(props.token, user.id); emit('notice', t.value.deleteSuccess); await refresh() } catch (error) { fail(error, accessCopy.value.userSaveError) }
+}
+async function resetUserTotp(user: AdminUser) {
+  if (!confirm(t.value.confirmDelete)) return
+  try { await adminApi.resetUserTotp(props.token, user.id); emit('notice', t.value.saveSuccess); await refresh() } catch (error) { fail(error, accessCopy.value.userSaveError) }
+}
+async function deleteRole(role: AdminRole) {
+  if (role.name === 'admin' || role.name === 'operator' || role.name === 'viewer' || (role.user_count || 0) > 0 || !confirm(t.value.confirmDelete)) return
+  try { await adminApi.deleteRole(props.token, role.name); emit('notice', t.value.deleteSuccess); await refresh() } catch (error) { fail(error, accessCopy.value.roleSaveError) }
+}
 function categoryName(id: string) {
   const category = categories.value.find(item => item.id === id)
   return category ? `${category.slug} · ${category.name}` : id
@@ -149,8 +184,16 @@ defineExpose({ refresh })
 
 <template>
   <template v-if="section === 'nodes'"><BaseTable :empty="!nodes.length ? t.noResults : ''"><template #head><thead><tr><th>{{ t.name }}</th><th>{{ t.region }}</th><th>{{ t.version }}</th><th>{{ t.status }}</th><th>{{ t.lastSeen }}</th></tr></thead></template><template #body><tbody><tr v-for="node in nodes" :key="node.id"><td>{{ node.name }}</td><td>{{ node.region }}</td><td>{{ node.version }}</td><td>{{ node.status }}</td><td>{{ formatDateTime(node.last_seen_at) || t.unknown }}</td></tr></tbody></template></BaseTable></template>
-  <template v-else-if="section === 'users'"><BaseTable :empty="!users.length ? t.noResults : ''"><template #head><thead><tr><th>{{ t.username }}</th><th>{{ t.adminRoles }}</th><th>{{ t.enabled }}</th></tr></thead></template><template #body><tbody><tr v-for="user in users" :key="user.id"><td>{{ user.username }}</td><td>{{ user.roles }}</td><td>{{ user.active }}</td></tr></tbody></template></BaseTable></template>
-  <template v-else-if="section === 'roles'"><BaseTable :empty="!roles.length ? t.noResults : ''"><template #head><thead><tr><th>{{ t.name }}</th><th>{{ t.permissions }}</th></tr></thead></template><template #body><tbody><tr v-for="role in roles" :key="role.name"><td>{{ role.name }}</td><td>{{ role.permissions }}</td></tr></tbody></template></BaseTable></template>
+  <template v-else-if="section === 'users'">
+    <section class="panel admin-resource-section access-management"><div class="section-heading"><div><span class="eyebrow">{{ t.usersTitle }}</span><h2>{{ accessCopy.userManagement }}</h2></div><button class="refresh" type="button" @click="openUserCreate">{{ t.add }}</button></div><p class="settings-description">{{ accessCopy.userManagementHint }}</p></section>
+    <BaseTable :empty="!users.length ? t.noResults : ''"><template #head><thead><tr><th>{{ t.username }}</th><th>{{ t.adminRoles }}</th><th>{{ t.status }}</th><th>{{ t.actions }}</th></tr></thead></template><template #body><tbody><tr v-for="user in users" :key="user.id"><td>{{ user.username }}</td><td>{{ parseList(user.roles).join(', ') || accessCopy.noRole }}</td><td><span class="enabled-state" :class="{ disabled: user.active === false }"><i></i>{{ user.active === false ? t.disabled : t.enabled }}</span></td><td class="table-actions"><button class="icon-button" type="button" @click="openUserEdit(user)">{{ t.edit }}</button><button class="icon-button" type="button" @click="toggleUser(user)">{{ user.active === false ? t.enable : t.disable }}</button><button class="icon-button" type="button" :disabled="!user.totp_enabled" @click="resetUserTotp(user)">{{ t.resetTotp }}</button><button class="icon-button danger-button" type="button" :disabled="user.active !== false" @click="deleteUser(user)">{{ t.delete }}</button></td></tr></tbody></template></BaseTable>
+    <BaseDialog :open="userEditorOpen" :title="editingUserID ? accessCopy.editUser : accessCopy.addUser" size="small" @close="userEditorOpen = false"><form class="notification-form access-editor-form" @submit.prevent="saveUser"><FormField :label="t.username"><input v-model="userForm.username" autocomplete="username" required></FormField><FormField :label="t.password"><input v-model="userForm.password" type="password" autocomplete="new-password" :placeholder="editingUserID ? accessCopy.passwordKeepHint : ''" :required="!editingUserID"></FormField><FormField :label="t.adminRoles"><select v-model="userForm.role"><option v-for="role in roles" :key="role.name" :value="role.name">{{ role.name }}</option></select></FormField><label class="checkbox-field"><input v-model="userForm.active" type="checkbox">{{ t.enabled }}</label><div class="editor-form-actions"><button class="icon-button" type="button" @click="userEditorOpen = false">{{ t.cancel }}</button><button class="icon-button" type="submit">{{ t.save }}</button></div></form></BaseDialog>
+  </template>
+  <template v-else-if="section === 'roles'">
+    <section class="panel admin-resource-section access-management"><div class="section-heading"><div><span class="eyebrow">{{ t.rolesTitle }}</span><h2>{{ accessCopy.roleManagement }}</h2></div><button class="refresh" type="button" @click="openRoleCreate">{{ t.add }}</button></div><p class="settings-description">{{ accessCopy.roleManagementHint }}</p></section>
+    <BaseTable :empty="!roles.length ? t.noResults : ''"><template #head><thead><tr><th>{{ t.name }}</th><th>{{ t.permissions }}</th><th>{{ t.associatedUsers }}</th><th>{{ t.actions }}</th></tr></thead></template><template #body><tbody><tr v-for="role in roles" :key="role.name"><td>{{ role.name }}</td><td>{{ role.name === 'admin' ? accessCopy.allPermissions : parseList(role.permissions).join(', ') || accessCopy.noPermissions }}</td><td>{{ role.user_count || 0 }}</td><td class="table-actions"><button class="icon-button" type="button" :disabled="role.name === 'admin'" @click="openRoleEdit(role)">{{ t.edit }}</button><button class="icon-button danger-button" type="button" :disabled="role.name === 'admin' || role.name === 'operator' || role.name === 'viewer' || (role.user_count || 0) > 0" @click="deleteRole(role)">{{ t.deleteRole }}</button></td></tr></tbody></template></BaseTable>
+    <BaseDialog :open="roleEditorOpen" :title="editingRoleName ? accessCopy.editRole : accessCopy.addRole" size="small" @close="roleEditorOpen = false"><form class="notification-form access-editor-form" @submit.prevent="saveRole"><FormField :label="t.name"><input v-model="roleForm.name" :readonly="!!editingRoleName" required></FormField><div class="permission-list"><strong>{{ t.permissions }}</strong><label v-for="permission in permissionOptions" :key="permission" class="checkbox-field"><input v-model="roleForm.permissions" type="checkbox" :value="permission">{{ permission }}</label></div><div class="editor-form-actions"><button class="icon-button" type="button" @click="roleEditorOpen = false">{{ t.cancel }}</button><button class="icon-button" type="submit">{{ t.save }}</button></div></form></BaseDialog>
+  </template>
   <AdminNotificationManagement v-else-if="section === 'notifications'" :token="token" @error="emit('error', $event)" @notice="emit('notice', $event)" />
   <AdminNotificationRuleManagement v-else-if="section === 'notification-rules'" :token="token" @error="emit('error', $event)" @notice="emit('notice', $event)" />
   <template v-else-if="section === 'test-images'">
@@ -189,5 +232,5 @@ defineExpose({ refresh })
     </BaseDialog>
   </template>
   <AdminSettingsManagement v-else-if="section === 'settings'" :token="token" @error="emit('error', $event)" @notice="emit('notice', $event)" />
-  <template v-else><section class="panel admin-resource-section"><h2>{{ t.settingsTitle }}</h2><div class="setting-row setting-highlight"><label>{{ t.probeInterval }}<input v-model.number="probeIntervalMinutes" type="number" min="1" max="1440"></label><p>{{ t.probeIntervalHint }}</p></div><section class="setting-row totp-settings"><div class="setting-row-title"><strong>{{ t.totpTitle }}</strong><span class="enabled-state" :class="{ disabled: !totp.enabled }"><i></i>{{ totp.enabled ? t.enabled : t.disabled }}</span></div><p>{{ t.totpDescription }}</p><button class="icon-button" type="button" @click="generateTOTP">{{ t.generateSecret }}</button><label v-if="totpSecret">{{ t.secret }}<input v-model="totpSecret" readonly></label><label v-if="totp.otpauth_uri">{{ t.otpUri }}<input :value="totp.otpauth_uri" readonly></label><label v-if="totpSecret">{{ t.verificationCode }}<input v-model="totpCode" inputmode="numeric" maxlength="6" :placeholder="t.verificationCode"></label><p v-if="totpSecret" class="totp-uri">{{ t.totpHint }}</p><button v-if="totpSecret && !totp.enabled" class="refresh" type="button" @click="enableTOTP">{{ t.enableTotp }}</button><button v-if="totp.enabled" class="icon-button danger-button" type="button" @click="disableTOTP">{{ t.disableTotp }}</button></section><div v-for="entry in settingEntries" :key="entry.key" class="setting-row"><label>{{ entry.key }}<input v-model="entry.value"></label></div><button class="refresh" type="button" @click="saveSettings">{{ t.saveSettings }}</button><pre>{{ JSON.stringify(settings, null, 2) }}</pre></section></template>
+  <template v-else></template>
 </template>

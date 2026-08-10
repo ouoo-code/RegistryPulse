@@ -30,8 +30,10 @@ const adminSections = [
   { key: 'sources', label: 'adminSources' }, { key: 'categories', label: 'adminCategories' }, { key: 'tasks', label: 'adminTasks' }, { key: 'history', label: 'history' },
   { key: 'nodes', label: 'adminNodes' },
   { key: 'notifications', label: 'adminNotifications' }, { key: 'notification-rules', label: 'adminNotificationRules' },
+  { key: 'users', label: 'adminUsers' }, { key: 'roles', label: 'adminRoles' },
   { key: 'test-images', label: 'adminTestImages' }, { key: 'credentials', label: 'adminCredentials' }, { key: 'settings', label: 'adminSettings' },
 ] as const satisfies readonly AdminSection[]
+const visibleAdminSections = adminSections.filter(item => item.key !== 'users' && item.key !== 'roles')
 
 async function signIn(credentials: { username: string; password: string; totp_code?: string }) {
   try {
@@ -85,7 +87,7 @@ onUnmounted(clearFeedbackTimer)
     <RouterLink class="admin-login-back" to="/">{{ t.backToSite }}</RouterLink>
   </header>
   <AdminLogin v-if="!token" :error="error" @submit="signIn" />
-  <AdminLayout v-else :active-section="activeSection" :sections="adminSections" @section="setSection" @refresh="refreshActive" @add="sourceManagement?.openCreate()" @sign-out="signOut" @change-password="changePassword">
+  <AdminLayout v-else :token="token" :active-section="activeSection" :sections="visibleAdminSections" @section="setSection" @access="setSection" @refresh="refreshActive" @add="sourceManagement?.openCreate()" @sign-out="signOut" @change-password="changePassword" @error="handleError" @notice="handleNotice">
     <div v-if="error" class="alert">{{ error }}</div><div v-if="notice" class="success">{{ notice }}</div>
     <AdminSourceManagement v-if="activeSection === 'sources'" ref="sourceManagement" :token="token" @error="handleError" @notice="handleNotice" />
     <AdminCategoryManagement v-else-if="activeSection === 'categories'" ref="categoryManagement" :token="token" @error="handleError" @notice="handleNotice" />

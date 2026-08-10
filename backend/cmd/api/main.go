@@ -48,6 +48,10 @@ func main() {
 			slog.Error("database initialization failed", "error", err)
 			os.Exit(1)
 		}
+		if err = auth.MigrateTOTPSecrets(ctx, db); err != nil {
+			slog.Error("TOTP secret migration failed", "error", err)
+			os.Exit(1)
+		}
 		if adminUser, adminPassword := os.Getenv("ADMIN_USERNAME"), os.Getenv("ADMIN_PASSWORD"); adminUser != "" && adminPassword != "" {
 			if err = auth.EnsureAdmin(ctx, db, adminUser, adminPassword); err != nil {
 				slog.Error("admin bootstrap failed", "error", err)

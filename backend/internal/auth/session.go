@@ -42,7 +42,7 @@ func (s *SessionStore) HasPermission(ctx context.Context, userID, permission str
 	return allowed, err
 }
 
-func (s *SessionStore) Audit(ctx context.Context, userID, action, resource string, details any) error {
+func (s *SessionStore) Audit(ctx context.Context, userID, username, action, resource string, details any) error {
 	if s == nil || s.DB == nil {
 		return fmt.Errorf("authentication store is unavailable")
 	}
@@ -54,7 +54,7 @@ func (s *SessionStore) Audit(ctx context.Context, userID, action, resource strin
 	if userID != "" {
 		actor = userID
 	}
-	_, err = s.DB.ExecContext(ctx, `INSERT INTO audit_logs(user_id,action,resource,details) VALUES($1,$2,$3,$4::jsonb)`, actor, action, resource, string(payload))
+	_, err = s.DB.ExecContext(ctx, `INSERT INTO audit_logs(user_id,actor_username,action,resource,details) VALUES($1,$2,$3,$4,$5::jsonb)`, actor, username, action, resource, string(payload))
 	return err
 }
 
@@ -63,13 +63,21 @@ func (s *SessionStore) Authenticate(ctx context.Context, username, password, tot
 		return User{}, "", fmt.Errorf("authentication store is unavailable")
 	}
 	var user User
-	var hash, totpSecret string
-	err := s.DB.QueryRowContext(ctx, `SELECT u.id::text,u.username,u.password_hash,COALESCE((SELECT r.name FROM user_roles ur JOIN roles r ON r.id=ur.role_id WHERE ur.user_id=u.id ORDER BY CASE WHEN r.name='admin' THEN 0 ELSE 1 END,r.name LIMIT 1),'user'),COALESCE(u.totp_secret,''),COALESCE(u.totp_enabled,false),COALESCE(u.must_change_password,false) FROM users u WHERE u.username=$1 AND u.is_active`, username).Scan(&user.ID, &user.Username, &hash, &user.Role, &totpSecret, &user.TOTPEnabled, &user.MustChangePassword)
+	var hash, legacyTOTP string
+	var totpCiphertext, totpNonce []byte
+	err := s.DB.QueryRowContext(ctx, `SELECT u.id::text,u.username,u.password_hash,COALESCE((SELECT r.name FROM user_roles ur JOIN roles r ON r.id=ur.role_id WHERE ur.user_id=u.id ORDER BY CASE WHEN r.name='admin' THEN 0 ELSE 1 END,r.name LIMIT 1),'user'),COALESCE(u.totp_secret_ciphertext,''::bytea),COALESCE(u.totp_secret_nonce,''::bytea),COALESCE(u.totp_secret,''),COALESCE(u.totp_enabled,false),COALESCE(u.must_change_password,false) FROM users u WHERE u.username=$1 AND u.is_active`, username).Scan(&user.ID, &user.Username, &hash, &user.Role, &totpCiphertext, &totpNonce, &legacyTOTP, &user.TOTPEnabled, &user.MustChangePassword)
 	if err == sql.ErrNoRows || !CheckPassword(hash, password) {
 		return User{}, "", ErrInvalidCredentials
 	}
 	if err != nil {
 		return User{}, "", fmt.Errorf("authenticate: %w", err)
+	}
+	totpSecret := legacyTOTP
+	if len(totpCiphertext) > 0 {
+		totpSecret, err = DecryptTOTPSecret(totpCiphertext, totpNonce)
+		if err != nil {
+			return User{}, "", fmt.Errorf("decrypt TOTP secret: %w", err)
+		}
 	}
 	if user.TOTPEnabled && !VerifyTOTP(totpSecret, totpCode, time.Now().UTC()) {
 		return User{}, "", ErrTOTPRequired

@@ -41,11 +41,23 @@ func (s *Server) requirePermission(w http.ResponseWriter, r *http.Request, permi
 	return user, true
 }
 
+// requireAdmin protects account and role administration. These operations
+// change who can access the console, so a normal settings.write permission is
+// intentionally not sufficient.
+func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) (auth.User, bool) {
+	user, ok := s.hasPermission(r, "")
+	if !ok || user.Role != "admin" {
+		writeError(w, http.StatusForbidden, "ADMIN_REQUIRED", "administrator role is required")
+		return auth.User{}, false
+	}
+	return user, true
+}
+
 func (s *Server) audit(ctxRequest *http.Request, user auth.User, action, resource string, details any) {
 	if s.sessions == nil {
 		return
 	}
-	_ = s.sessions.Audit(ctxRequest.Context(), user.ID, action, resource, details)
+	_ = s.sessions.Audit(ctxRequest.Context(), user.ID, user.Username, action, resource, details)
 }
 
 func (s *Server) auditLogs(w http.ResponseWriter, r *http.Request) {
@@ -66,7 +78,7 @@ func (s *Server) auditLogs(w http.ResponseWriter, r *http.Request) {
 			limit = value
 		}
 	}
-	rows, err := s.sessions.DB.QueryContext(r.Context(), `SELECT id,user_id::text,action,resource,details,created_at FROM audit_logs ORDER BY created_at DESC,id DESC LIMIT $1`, limit)
+	rows, err := s.sessions.DB.QueryContext(r.Context(), `SELECT id,user_id::text,actor_username,action,resource,details,created_at FROM audit_logs ORDER BY created_at DESC,id DESC LIMIT $1`, limit)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "AUDIT_QUERY_FAILED", "could not query audit logs")
 		return
@@ -75,6 +87,7 @@ func (s *Server) auditLogs(w http.ResponseWriter, r *http.Request) {
 	type entry struct {
 		ID        int64           `json:"id"`
 		UserID    string          `json:"user_id,omitempty"`
+		Actor     string          `json:"actor_username,omitempty"`
 		Action    string          `json:"action"`
 		Resource  string          `json:"resource"`
 		Details   json.RawMessage `json:"details"`
@@ -85,7 +98,7 @@ func (s *Server) auditLogs(w http.ResponseWriter, r *http.Request) {
 		var value entry
 		var userID sql.NullString
 		var details []byte
-		if err := rows.Scan(&value.ID, &userID, &value.Action, &value.Resource, &details, &value.CreatedAt); err != nil {
+		if err := rows.Scan(&value.ID, &userID, &value.Actor, &value.Action, &value.Resource, &details, &value.CreatedAt); err != nil {
 			writeError(w, 500, "AUDIT_QUERY_FAILED", "could not read audit logs")
 			return
 		}

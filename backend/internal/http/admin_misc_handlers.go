@@ -33,14 +33,12 @@ func (s *Server) adminTOTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Method == http.MethodGet {
 		var enabled bool
-		var secret string
-		if err := db.QueryRowContext(r.Context(), `SELECT COALESCE(totp_enabled,false),COALESCE(totp_secret,'') FROM users WHERE id=$1`, user.ID).Scan(&enabled, &secret); err != nil {
+		var ciphertext, legacy []byte
+		if err := db.QueryRowContext(r.Context(), `SELECT COALESCE(totp_enabled,false),COALESCE(totp_secret_ciphertext,''::bytea),COALESCE(totp_secret,'') FROM users WHERE id=$1`, user.ID).Scan(&enabled, &ciphertext, &legacy); err != nil {
 			writeError(w, 404, "USER_NOT_FOUND", "user not found")
 			return
 		}
-		// A TOTP secret is equivalent to a password. It is only returned once
-		// by the generate action and must never be exposed by a status query.
-		writeData(w, map[string]any{"enabled": enabled, "configured": secret != ""}, nil)
+		writeData(w, map[string]any{"enabled": enabled, "configured": len(ciphertext) > 0 || len(legacy) > 0}, nil)
 		return
 	}
 	var input struct {
@@ -69,7 +67,12 @@ func (s *Server) adminTOTP(w http.ResponseWriter, r *http.Request) {
 			writeError(w, 400, "TOTP_INVALID", "the TOTP code is invalid")
 			return
 		}
-		if _, err := db.ExecContext(r.Context(), `UPDATE users SET totp_secret=$1,totp_enabled=true WHERE id=$2`, secret, user.ID); err != nil {
+		ciphertext, nonce, err := auth.EncryptTOTPSecret(secret)
+		if err != nil {
+			writeError(w, 503, "TOTP_ENCRYPTION_UNAVAILABLE", "TOTP encryption is not configured")
+			return
+		}
+		if _, err := db.ExecContext(r.Context(), `UPDATE users SET totp_secret_ciphertext=$1,totp_secret_nonce=$2,totp_secret='',totp_enabled=true WHERE id=$3`, ciphertext, nonce, user.ID); err != nil {
 			writeError(w, 500, "TOTP_UPDATE_FAILED", "could not enable TOTP")
 			return
 		}
@@ -78,8 +81,16 @@ func (s *Server) adminTOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if input.Action == "disable" {
-		var secret string
-		if err := db.QueryRowContext(r.Context(), `SELECT COALESCE(totp_secret,'') FROM users WHERE id=$1`, user.ID).Scan(&secret); err != nil || !auth.VerifyTOTP(secret, input.Code, time.Now().UTC()) {
+		var ciphertext, nonce, legacy []byte
+		if err := db.QueryRowContext(r.Context(), `SELECT COALESCE(totp_secret_ciphertext,''::bytea),COALESCE(totp_secret_nonce,''::bytea),COALESCE(totp_secret,'') FROM users WHERE id=$1`, user.ID).Scan(&ciphertext, &nonce, &legacy); err != nil {
+			writeError(w, 404, "USER_NOT_FOUND", "user not found")
+			return
+		}
+		secret := string(legacy)
+		if len(ciphertext) > 0 {
+			secret, _ = auth.DecryptTOTPSecret(ciphertext, nonce)
+		}
+		if secret == "" || !auth.VerifyTOTP(secret, input.Code, time.Now().UTC()) {
 			writeError(w, 400, "TOTP_INVALID", "the TOTP code is invalid")
 			return
 		}

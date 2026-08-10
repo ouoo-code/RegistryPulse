@@ -1,4 +1,4 @@
-import { api, type AdminRole, type AdminSettings, type AdminTask, type AdminUser, type Category, type CategoryInput, type CredentialProfile, type CredentialProfileInput, type History, type NotificationChannel, type NotificationRule, type ProbeNode, type ProbeTestInput, type ProbeTestResult, type Source, type TestImage, type TestImageQuery, type TotpSettings } from './api'
+import { api, type AdminRole, type AdminRoleInput, type AdminSettings, type AdminTask, type AdminUser, type AdminUserInput, type Category, type CategoryInput, type CredentialProfile, type CredentialProfileInput, type History, type NotificationChannel, type NotificationRule, type ProbeNode, type ProbeTestInput, type ProbeTestResult, type Source, type TestImage, type TestImageQuery, type TotpSettings } from './api'
 
 export function adminHeaders(token: string): HeadersInit {
   return { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }
@@ -18,6 +18,13 @@ export const adminApi = {
   nodes: (token: string) => adminRequest<ProbeNode[]>(token, '/admin/probes'),
   users: (token: string) => adminRequest<AdminUser[]>(token, '/admin/users'),
   roles: (token: string) => adminRequest<AdminRole[]>(token, '/admin/roles'),
+  createUser: (token: string, input: AdminUserInput) => adminRequest<AdminUser>(token, '/admin/users', { method: 'POST', body: JSON.stringify(input) }),
+  updateUser: (token: string, id: string, input: AdminUserInput) => adminRequest<AdminUser>(token, `/admin/users/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(input) }),
+  deleteUser: (token: string, id: string) => adminRequest<{ id: string; username: string; deleted: boolean }>(token, `/admin/users/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  resetUserTotp: (token: string, id: string) => adminRequest<{ id: string; username: string; totp_enabled: boolean }>(token, `/admin/users/${encodeURIComponent(id)}/totp/reset`, { method: 'POST' }),
+  createRole: (token: string, input: AdminRoleInput) => adminRequest<AdminRole>(token, '/admin/roles', { method: 'POST', body: JSON.stringify(input) }),
+  updateRole: (token: string, name: string, input: AdminRoleInput) => adminRequest<AdminRole>(token, `/admin/roles/${encodeURIComponent(name)}`, { method: 'PUT', body: JSON.stringify(input) }),
+  deleteRole: (token: string, name: string) => adminRequest<{ name: string; deleted: boolean }>(token, `/admin/roles/${encodeURIComponent(name)}`, { method: 'DELETE' }),
   notifications: (token: string) => adminRequest<NotificationChannel[]>(token, '/admin/notifications'),
   notificationRules: (token: string) => adminRequest<NotificationRule[]>(token, '/admin/notification-rules'),
   credentialProfiles: (token: string) => adminRequest<CredentialProfile[]>(token, '/admin/credential-profiles'),

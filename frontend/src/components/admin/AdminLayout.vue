@@ -5,8 +5,8 @@ import { useI18n } from '../../i18n'
 import AdminAccountMenu from './AdminAccountMenu.vue'
 
 export type AdminSection = { key: string; label: string }
-defineProps<{ activeSection: string; sections: readonly AdminSection[] }>()
-const emit = defineEmits<{ section: [key: string]; refresh: []; add: []; signOut: []; changePassword: [payload: { currentPassword: string; newPassword: string }] }>()
+const props = defineProps<{ activeSection: string; sections: readonly AdminSection[]; token: string }>()
+const emit = defineEmits<{ section: [key: string]; refresh: []; add: []; signOut: []; changePassword: [payload: { currentPassword: string; newPassword: string }]; access: [section: 'users' | 'roles']; error: [message: string]; notice: [message: string] }>()
 const { t, locale, toggleLocale } = useI18n()
 const dark = ref(document.documentElement.classList.contains('dark'))
 function toggleTheme() {
@@ -26,7 +26,7 @@ onMounted(() => { dark.value = document.documentElement.classList.contains('dark
         <RouterLink class="admin-header-link" to="/about">{{ t.about }}</RouterLink>
         <button class="icon-button admin-header-icon" type="button" @click="toggleLocale">{{ locale === 'zh' ? 'EN' : '中文' }}</button>
         <button class="icon-button admin-header-icon" type="button" @click="toggleTheme" :aria-label="dark ? 'Light mode' : 'Dark mode'">{{ dark ? '☀' : '☾' }}</button>
-        <AdminAccountMenu @sign-out="emit('signOut')" @change-password="emit('changePassword', $event)" />
+        <AdminAccountMenu :token="props.token" @access="emit('access', $event)" @sign-out="emit('signOut')" @change-password="emit('changePassword', $event)" @error="emit('error', $event)" @notice="emit('notice', $event)" />
       </div>
     </header>
     <main class="page admin-page">

@@ -2,13 +2,16 @@
 import { ref } from 'vue'
 import { useI18n } from '../../i18n'
 import BaseDialog from '../BaseDialog.vue'
+import AdminTotpDialog from './AdminTotpDialog.vue'
 
-const emit = defineEmits<{ signOut: []; changePassword: [payload: { currentPassword: string; newPassword: string }] }>()
+const props = defineProps<{ token: string }>()
+const emit = defineEmits<{ access: [section: 'users' | 'roles']; signOut: []; changePassword: [payload: { currentPassword: string; newPassword: string }]; error: [message: string]; notice: [message: string] }>()
 const { t } = useI18n()
 const open = ref(false)
 const passwordDialogOpen = ref(false)
 const currentPassword = ref('')
 const newPassword = ref('')
+const totpDialogOpen = ref(false)
 
 function openPasswordDialog() {
   open.value = false
@@ -25,12 +28,20 @@ function submitPassword() {
   emit('changePassword', { currentPassword: currentPassword.value, newPassword: newPassword.value })
   closePasswordDialog()
 }
+
+function openTOTPDialog() {
+  open.value = false
+  totpDialogOpen.value = true
+}
 </script>
 
 <template>
   <div class="admin-menu-wrap">
     <button class="admin-menu-toggle" type="button" :aria-expanded="open" :aria-label="t.account" @click="open = !open">{{ t.account }} <span>⌄</span></button>
     <div v-if="open" class="admin-menu-popover">
+      <button class="admin-menu-item" type="button" @click="emit('access', 'users'); open = false">{{ t.adminUsers }}</button>
+      <button class="admin-menu-item" type="button" @click="emit('access', 'roles'); open = false">{{ t.adminRoles }}</button>
+      <button class="admin-menu-item" type="button" @click="openTOTPDialog">{{ t.totpAccount }}</button>
       <button class="admin-menu-item" type="button" @click="openPasswordDialog">{{ t.changePassword }}<span>›</span></button>
       <button class="admin-menu-item admin-signout" type="button" @click="emit('signOut')">{{ t.signOut }}<span>›</span></button>
     </div>
@@ -42,5 +53,6 @@ function submitPassword() {
         <div class="password-form-actions"><button class="refresh" type="submit">{{ t.changePassword }}</button><button class="icon-button" type="button" @click="closePasswordDialog">{{ t.cancel }}</button></div>
       </form>
     </BaseDialog>
+    <AdminTotpDialog :open="totpDialogOpen" :token="props.token" @close="totpDialogOpen = false" @error="emit('error', $event)" @notice="emit('notice', $event)" />
   </div>
 </template>

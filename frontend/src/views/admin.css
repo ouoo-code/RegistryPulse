@@ -162,6 +162,15 @@
 .base-table .table-actions .status-action-disable:hover { border-color: #df8a8a; background: #fff0f0; }
 .base-table .table-actions .danger-button { color: inherit; }
 .admin-resource-section { margin-bottom: 14px; }
+.access-management h2 { margin: 3px 0 0; }
+.access-management .settings-description { margin: 5px 0 0; color: #8491a0; font-size: 12px; }
+.access-editor-form .checkbox-field { align-self: end; min-height: 42px; }
+.permission-list { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px; padding: 10px; border: 1px solid #d9e2ec; border-radius: 9px; background: #f8fafc; }
+.permission-list strong { grid-column: 1 / -1; color: #334b65; font-size: 13px; }
+.permission-list .checkbox-field { min-height: 30px; }
+.dark .access-management .settings-description { color: #9db0c4; }
+.dark .permission-list { border-color: #354657; background: #202d3a; }
+.dark .permission-list strong { color: #dce7f2; }
 .credential-editor-form { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .credential-editor-form .credential-enabled { align-self: end; box-sizing: border-box; width: 100%; height: 42px; min-height: 42px; padding: 0 12px; border: 1px solid #d9e2ec; border-radius: 8px; background: #f8fafc; color: #4d6075; }
 .credential-management .settings-description { margin-bottom: 16px; }
@@ -250,6 +259,9 @@
 .password-form label { display: grid; gap: 7px; color: #657589; font-size: 13px; }
 .password-form input { width: 100%; border: 1px solid #d9e2ec; border-radius: 8px; padding: 11px 12px; background: #fff; color: #24374f; font: inherit; }
 .password-form-actions { display: flex; gap: 8px; justify-content: flex-end; padding-top: 2px; }
+.totp-dialog-form { display: grid; gap: 14px; }
+.totp-status-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid #d9e2ec; border-radius: 8px; color: #657589; font-size: 13px; }
+.totp-dialog-actions { justify-content: flex-start; padding-top: 0; }
 .setting-row { margin-bottom: 12px; }
 .setting-highlight { padding: 14px; border: 1px solid #b7e5e2; border-radius: 10px; background: #f0fbfa; }
 .setting-highlight p { margin: 7px 0 0; color: #6f858e; font-size: 12px; }
@@ -308,6 +320,7 @@
 .dark .admin-menu-item { color: #dce7f2; }
 .dark .admin-menu-item:hover { background: #203a62; color: #83b2ff; }
 .dark .admin-menu-item.admin-signout { color: #ff9898; }
+.dark .totp-status-row { border-color: #354657; color: #aab7c5; }
 .dark .admin-page .subhero > p:last-child, .dark .form-field, .dark .setting-row label, .dark .password-form label { color: #aab7c5; }
 .dark .test-image-form .test-image-enabled { border-color: #354657; background: #202d3a; color: #dce7f2; }
 .dark .test-image-form .form-field small, .dark .test-image-filter-hint { color: #aab7c5; }
