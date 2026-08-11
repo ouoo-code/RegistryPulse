@@ -49,7 +49,7 @@ func Ping(ctx context.Context, db *sql.DB) error {
 // with an empty database, and the marker only prevents API and Worker from
 // repeating initialization after a restart.
 func Initialize(ctx context.Context, db *sql.DB, dir string) error {
-	files := []string{"001_initial.sql", "004_seed_defaults.sql", "018_seed_anye_status_sources.sql", "019_access_security.sql", "023_remove_proxy_listen_port_setting.sql"}
+	files := []string{"001_initial.sql", "004_seed_defaults.sql", "018_seed_anye_status_sources.sql", "019_access_security.sql", "023_remove_proxy_listen_port_setting.sql", "024_probe_result_probe_mode.sql"}
 	for _, name := range files {
 		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
 			return fmt.Errorf("read database initialization file %s: %w", name, err)

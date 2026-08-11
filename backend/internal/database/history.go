@@ -38,11 +38,11 @@ func (s *Store) RecordProbe(ctx context.Context, source domain.Source, result pr
 	var probeID int64
 	if err = tx.QueryRowContext(ctx, `
 		INSERT INTO probe_results
-		(source_id,status,dns_duration_ms,tcp_duration_ms,tls_duration_ms,registry_duration_ms,manifest_duration_ms,blob_duration_ms,blob_bytes,error,error_stage,dns_success,resolved_ips,tcp_success,remote_ip,remote_port,tls_success,tls_version,tls_cipher,certificate_subject,certificate_issuer,certificate_days_remaining,registry_api_success,registry_api_status,manifest_success,manifest_status,manifest_content_type,manifest_digest,blob_success,blob_status,blob_ttfb_ms,blob_speed_bps,checked_at,certificate_not_before,certificate_not_after,registry_api_version,manifest_size,blob_range_supported,dns_error,tcp_error,tls_error,registry_api_error,manifest_error,blob_error)
-		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44) RETURNING id`,
+		(source_id,status,dns_duration_ms,tcp_duration_ms,tls_duration_ms,registry_duration_ms,manifest_duration_ms,blob_duration_ms,blob_bytes,error,error_stage,dns_success,resolved_ips,tcp_success,remote_ip,remote_port,tls_success,tls_version,tls_cipher,certificate_subject,certificate_issuer,certificate_days_remaining,registry_api_success,registry_api_status,manifest_success,manifest_status,manifest_content_type,manifest_digest,blob_success,blob_status,blob_ttfb_ms,blob_speed_bps,checked_at,certificate_not_before,certificate_not_after,registry_api_version,manifest_size,blob_range_supported,dns_error,tcp_error,tls_error,registry_api_error,manifest_error,blob_error,probe_mode)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45) RETURNING id`,
 		source.ID, status, result.DNSMS, result.TCPMS, result.TLSMS,
 		result.RegistryMS, result.ManifestMS, result.BlobMS, result.BlobBytes,
-		result.Error, result.ErrorStage, result.DNSSuccess, string(resolvedIPs), result.TCPSuccess, result.RemoteIP, result.RemotePort, result.TLSSuccess, result.TLSVersion, result.TLSCipher, result.CertificateSubject, result.CertificateIssuer, result.CertificateDaysRemaining, result.RegistrySuccess, result.RegistryStatus, result.ManifestSuccess, result.ManifestStatus, result.ManifestContentType, result.ManifestDigest, result.BlobSuccess, result.BlobStatus, result.BlobTTFBMS, result.BlobSpeedBPS, checkedAt, nullTime(result.CertificateNotBefore), nullTime(result.CertificateNotAfter), result.RegistryAPIVersion, result.ManifestSize, result.BlobRangeSupported, result.DNSError, result.TCPError, result.TLSError, result.RegistryAPIError, result.ManifestError, result.BlobError).Scan(&probeID); err != nil {
+		result.Error, result.ErrorStage, result.DNSSuccess, string(resolvedIPs), result.TCPSuccess, result.RemoteIP, result.RemotePort, result.TLSSuccess, result.TLSVersion, result.TLSCipher, result.CertificateSubject, result.CertificateIssuer, result.CertificateDaysRemaining, result.RegistrySuccess, result.RegistryStatus, result.ManifestSuccess, result.ManifestStatus, result.ManifestContentType, result.ManifestDigest, result.BlobSuccess, result.BlobStatus, result.BlobTTFBMS, result.BlobSpeedBPS, checkedAt, nullTime(result.CertificateNotBefore), nullTime(result.CertificateNotAfter), result.RegistryAPIVersion, result.ManifestSize, result.BlobRangeSupported, result.DNSError, result.TCPError, result.TLSError, result.RegistryAPIError, result.ManifestError, result.BlobError, effectiveProbeMode(source.ProbeMode)).Scan(&probeID); err != nil {
 		return fmt.Errorf("insert probe result: %w", err)
 	}
 	stages := []struct {
@@ -81,6 +81,13 @@ func (s *Store) RecordProbe(ctx context.Context, source domain.Source, result pr
 		return fmt.Errorf("commit probe record: %w", err)
 	}
 	return nil
+}
+
+func effectiveProbeMode(mode string) string {
+	if mode == "" {
+		return "unknown"
+	}
+	return mode
 }
 
 func stageError(result probe.Result, stage string) string {

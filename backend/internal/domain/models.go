@@ -112,6 +112,7 @@ type ProbeResult struct {
 	SourceID                 string    `json:"source_id"`
 	ProbeNodeID              string    `json:"probe_node_id,omitempty"`
 	TaskID                   string    `json:"task_id,omitempty"`
+	ProbeMode                string    `json:"probe_mode"`
 	Status                   string    `json:"status"`
 	DNSMS                    int64     `json:"dns_duration_ms"`
 	TCPMS                    int64     `json:"tcp_duration_ms"`

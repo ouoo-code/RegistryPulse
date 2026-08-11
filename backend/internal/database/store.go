@@ -73,7 +73,7 @@ func (s *Store) History(id string, limit int) []domain.ProbeResult {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	rows, err := s.DB.Query(`SELECT id::text,source_id::text,status,dns_duration_ms,tcp_duration_ms,tls_duration_ms,registry_duration_ms,manifest_duration_ms,blob_duration_ms,blob_bytes,error,error_stage,dns_success,resolved_ips,tcp_success,remote_ip,remote_port,tls_success,tls_version,tls_cipher,certificate_subject,certificate_issuer,certificate_days_remaining,registry_api_success,registry_api_status,manifest_success,manifest_status,manifest_content_type,manifest_digest,blob_success,blob_status,blob_ttfb_ms,blob_speed_bps,checked_at,certificate_not_before,certificate_not_after,registry_api_version,manifest_size,blob_range_supported,dns_error,tcp_error,tls_error,registry_api_error,manifest_error,blob_error FROM probe_results WHERE source_id=$1 ORDER BY checked_at DESC LIMIT $2`, id, limit)
+	rows, err := s.DB.Query(`SELECT id::text,source_id::text,status,dns_duration_ms,tcp_duration_ms,tls_duration_ms,registry_duration_ms,manifest_duration_ms,blob_duration_ms,blob_bytes,error,error_stage,dns_success,resolved_ips,tcp_success,remote_ip,remote_port,tls_success,tls_version,tls_cipher,certificate_subject,certificate_issuer,certificate_days_remaining,registry_api_success,registry_api_status,manifest_success,manifest_status,manifest_content_type,manifest_digest,blob_success,blob_status,blob_ttfb_ms,blob_speed_bps,checked_at,certificate_not_before,certificate_not_after,registry_api_version,manifest_size,blob_range_supported,dns_error,tcp_error,tls_error,registry_api_error,manifest_error,blob_error,probe_mode FROM probe_results WHERE source_id=$1 ORDER BY checked_at DESC LIMIT $2`, id, limit)
 	if err != nil {
 		return nil
 	}
@@ -83,7 +83,7 @@ func (s *Store) History(id string, limit int) []domain.ProbeResult {
 		var v domain.ProbeResult
 		var resolved []byte
 		var notBefore, notAfter sql.NullTime
-		if rows.Scan(&v.ID, &v.SourceID, &v.Status, &v.DNSMS, &v.TCPMS, &v.TLSMS, &v.RegistryMS, &v.ManifestMS, &v.BlobMS, &v.BlobBytes, &v.Error, &v.ErrorStage, &v.DNSSuccess, &resolved, &v.TCPSuccess, &v.RemoteIP, &v.RemotePort, &v.TLSSuccess, &v.TLSVersion, &v.TLSCipher, &v.CertificateSubject, &v.CertificateIssuer, &v.CertificateDaysRemaining, &v.RegistrySuccess, &v.RegistryStatus, &v.ManifestSuccess, &v.ManifestStatus, &v.ManifestContentType, &v.ManifestDigest, &v.BlobSuccess, &v.BlobStatus, &v.BlobTTFBMS, &v.BlobSpeedBPS, &v.CheckedAt, &notBefore, &notAfter, &v.RegistryAPIVersion, &v.ManifestSize, &v.BlobRangeSupported, &v.DNSError, &v.TCPError, &v.TLSError, &v.RegistryAPIError, &v.ManifestError, &v.BlobError) == nil {
+		if rows.Scan(&v.ID, &v.SourceID, &v.Status, &v.DNSMS, &v.TCPMS, &v.TLSMS, &v.RegistryMS, &v.ManifestMS, &v.BlobMS, &v.BlobBytes, &v.Error, &v.ErrorStage, &v.DNSSuccess, &resolved, &v.TCPSuccess, &v.RemoteIP, &v.RemotePort, &v.TLSSuccess, &v.TLSVersion, &v.TLSCipher, &v.CertificateSubject, &v.CertificateIssuer, &v.CertificateDaysRemaining, &v.RegistrySuccess, &v.RegistryStatus, &v.ManifestSuccess, &v.ManifestStatus, &v.ManifestContentType, &v.ManifestDigest, &v.BlobSuccess, &v.BlobStatus, &v.BlobTTFBMS, &v.BlobSpeedBPS, &v.CheckedAt, &notBefore, &notAfter, &v.RegistryAPIVersion, &v.ManifestSize, &v.BlobRangeSupported, &v.DNSError, &v.TCPError, &v.TLSError, &v.RegistryAPIError, &v.ManifestError, &v.BlobError, &v.ProbeMode) == nil {
 			if notBefore.Valid {
 				v.CertificateNotBefore = notBefore.Time
 			}

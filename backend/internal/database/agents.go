@@ -134,15 +134,15 @@ func (r *AgentRegistry) CompleteTask(agentID, taskID string, in domain.AgentResu
 		return domain.ProbeTask{}, err
 	}
 	defer tx.Rollback()
-	var source string
-	if err = tx.QueryRow(`SELECT COALESCE(source_id::text,'') FROM probe_tasks WHERE id=$1 AND probe_node_id=$2 AND status IN ('running','leased') FOR UPDATE`, taskID, agentID).Scan(&source); err == sql.ErrNoRows {
+	var source, probeMode string
+	if err = tx.QueryRow(`SELECT COALESCE(t.source_id::text,''),COALESCE(CASE WHEN rs.probe_config_custom THEN NULLIF(rs.probe_mode,'') ELSE NULLIF(rc.default_probe_mode,'') END,'unknown') FROM probe_tasks t LEFT JOIN registry_sources rs ON rs.id=t.source_id LEFT JOIN registry_categories rc ON rc.id=rs.category_id WHERE t.id=$1 AND t.probe_node_id=$2 AND t.status IN ('running','leased') FOR UPDATE`, taskID, agentID).Scan(&source, &probeMode); err == sql.ErrNoRows {
 		return domain.ProbeTask{}, domain.ErrTaskNotAssigned
 	} else if err != nil {
 		return domain.ProbeTask{}, err
 	}
 	var resultID string
-	if err = tx.QueryRow(`INSERT INTO probe_results(source_id,probe_node_id,task_id,status,dns_duration_ms,tcp_duration_ms,tls_duration_ms,registry_duration_ms,manifest_duration_ms,blob_duration_ms,blob_bytes,error,checked_at)
-		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,now()) RETURNING id::text`, source, agentID, taskID, in.Status, in.DNSMS, in.TCPMS, in.TLSMS, in.RegistryMS, in.ManifestMS, in.BlobMS, in.BlobBytes, in.Error).Scan(&resultID); err != nil {
+	if err = tx.QueryRow(`INSERT INTO probe_results(source_id,probe_node_id,task_id,status,dns_duration_ms,tcp_duration_ms,tls_duration_ms,registry_duration_ms,manifest_duration_ms,blob_duration_ms,blob_bytes,error,probe_mode,checked_at)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,now()) RETURNING id::text`, source, agentID, taskID, in.Status, in.DNSMS, in.TCPMS, in.TLSMS, in.RegistryMS, in.ManifestMS, in.BlobMS, in.BlobBytes, in.Error, probeMode).Scan(&resultID); err != nil {
 		return domain.ProbeTask{}, err
 	}
 	// Derive the source status from the newest result reported by each probe.

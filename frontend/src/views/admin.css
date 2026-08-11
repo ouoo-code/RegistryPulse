@@ -85,6 +85,7 @@
 .history-error-cell { max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #d14b50; }
 .history-admin-table .history-time-column { width: 180px; min-width: 180px; white-space: nowrap; }
 .history-admin-table .history-source-column { width: 220px; min-width: 180px; }
+.history-admin-table .history-mode-column { width: 150px; min-width: 130px; white-space: nowrap; }
 .history-admin-table .history-status-column { width: 100px; min-width: 100px; white-space: nowrap; }
 .history-admin-table .history-response-column { width: 120px; min-width: 120px; white-space: nowrap; }
 .history-admin-table .history-stage-column { width: 150px; min-width: 130px; white-space: nowrap; }
