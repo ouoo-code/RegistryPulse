@@ -10,6 +10,7 @@ import AdminHistoryManagement from '../components/admin/AdminHistoryManagement.v
 import AdminLayout, { type AdminSection } from '../components/admin/AdminLayout.vue'
 import AdminLogin from '../components/admin/AdminLogin.vue'
 import AdminMiscSections from '../components/admin/AdminMiscSections.vue'
+import AdminProxyMonitor from '../components/admin/AdminProxyMonitor.vue'
 import AdminSourceManagement from '../components/admin/AdminSourceManagement.vue'
 import AdminTaskManagement from '../components/admin/AdminTaskManagement.vue'
 import './admin.css'
@@ -26,11 +27,12 @@ const taskManagement = ref<{ refresh: () => Promise<void> } | null>(null)
 const historyManagement = ref<{ refresh: () => Promise<void> } | null>(null)
 const miscSections = ref<{ refresh: () => Promise<void> } | null>(null)
 const credentialManagement = ref<{ refresh: () => Promise<void> } | null>(null)
+const proxyMonitor = ref<{ refresh: () => Promise<void> } | null>(null)
 const adminSections = [
   { key: 'sources', label: 'adminSources' }, { key: 'tasks', label: 'adminTasks' }, { key: 'history', label: 'history' }, { key: 'nodes', label: 'adminNodes' },
   { key: 'notifications', label: 'adminNotifications' }, { key: 'notification-rules', label: 'adminNotificationRules' },
   { key: 'categories', label: 'adminCategories' },
-  { key: 'test-images', label: 'adminTestImages' }, { key: 'credentials', label: 'adminCredentials' }, { key: 'settings', label: 'adminSettings' },
+  { key: 'test-images', label: 'adminTestImages' }, { key: 'credentials', label: 'adminCredentials' }, { key: 'proxy-monitor', label: 'adminProxyMonitor' }, { key: 'settings', label: 'adminSettings' },
 ] as const satisfies readonly AdminSection[]
 const visibleAdminSections = adminSections.filter(item => item.key !== 'users' && item.key !== 'roles')
 
@@ -71,7 +73,8 @@ async function refreshActive() {
   if (activeSection.value === 'tasks') await taskManagement.value?.refresh()
   if (activeSection.value === 'history') await historyManagement.value?.refresh()
   if (activeSection.value === 'credentials') await credentialManagement.value?.refresh()
-  if (!['sources', 'categories', 'tasks', 'history', 'credentials'].includes(activeSection.value)) await miscSections.value?.refresh()
+  if (activeSection.value === 'proxy-monitor') await proxyMonitor.value?.refresh()
+  if (!['sources', 'categories', 'tasks', 'history', 'credentials', 'proxy-monitor'].includes(activeSection.value)) await miscSections.value?.refresh()
 }
 function handleError(message: string) { error.value = message; notice.value = ''; scheduleFeedbackClear() }
 function handleNotice(message: string) { notice.value = message; error.value = ''; scheduleFeedbackClear() }
@@ -93,6 +96,7 @@ onUnmounted(clearFeedbackTimer)
     <AdminTaskManagement v-else-if="activeSection === 'tasks'" ref="taskManagement" :token="token" @error="handleError" @notice="handleNotice" />
     <AdminHistoryManagement v-else-if="activeSection === 'history'" ref="historyManagement" :token="token" @error="handleError" />
     <AdminCredentialManagement v-else-if="activeSection === 'credentials'" ref="credentialManagement" :token="token" @error="handleError" @notice="handleNotice" />
+    <AdminProxyMonitor v-else-if="activeSection === 'proxy-monitor'" ref="proxyMonitor" :token="token" @error="handleError" />
     <AdminMiscSections v-else ref="miscSections" :token="token" :section="activeSection" @error="handleError" @notice="handleNotice" />
   </AdminLayout>
 </template>

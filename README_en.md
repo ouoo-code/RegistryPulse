@@ -177,6 +177,8 @@ Relevant environment variables include `PROXY_CATEGORY_ID`, `PROXY_UPSTREAMS`, `
 
 The first implementation does not put passwords in route snapshots and does not relay a client `Authorization` header to a failover source. Private registry authentication should first be bound by host/category in Credential Profiles, then be extended with a host-bound Bearer/Basic credential module.
 
+Each proxied `/v2` request receives an `X-RegistryPulse-Request-ID` response header so client-side failures can be correlated with proxy logs. The proxy `/metrics` endpoint exposes active requests, forwarded bytes, response status classes, upstream failures, retries, and redirects. When a Manifest response has no known length, the proxy reads only up to the configured limit plus one byte in a bounded per-request buffer; it never persists image content.
+
 ### Registry Proxy administration
 
 Administrators can open **Settings → Registry Proxy** to manage the proxy control plane. The page shows the process heartbeat, readiness, actual listening port, configured port, category, and the number of healthy candidate sources. The enable switch is hot-applied: when disabled, the process remains alive but returns `PROXY_DISABLED` for Registry requests.

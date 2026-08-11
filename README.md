@@ -173,6 +173,8 @@ http://localhost:10800
 
 首次实现暂不把认证密码放入路由快照，也不把客户端 `Authorization` 原样转发到备用源。需要私有仓库认证时，应先在凭证配置中完成 host/类别绑定，再扩展代理的 host-bound Bearer/Basic 凭证模块。
 
+代理转发请求会返回 `X-RegistryPulse-Request-ID`，便于把客户端错误与代理日志对应起来。`/metrics` 还会暴露当前活动请求、转发字节数、响应状态类别、上游失败、重试和重定向统计。Manifest 在响应长度未知时也只会使用不超过配置上限的临时处理缓冲；镜像内容不会写入数据库、Redis、宿主机目录或容器文件系统。
+
 ## 镜像源探测
 
 默认流程包括 DNS、TCP、TLS、Registry /v2/ API、Bearer Token、Manifest 和受限 Blob Range 下载。

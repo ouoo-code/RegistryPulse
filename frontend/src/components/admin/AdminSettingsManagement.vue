@@ -28,6 +28,13 @@ const proxyStatusLabel = computed(() => {
   if (!data.status.enabled) return t.value.proxyStatusDisabled
   return data.status.ready ? t.value.proxyStatusReady : t.value.proxyStatusNoRoute
 })
+const proxyStatusClass = computed(() => {
+  const data = proxyData.value
+  if (!data?.status_available) return 'unavailable'
+  if (!data.status.running) return 'stopped'
+  if (!data.status.enabled) return 'disabled'
+  return data.status.ready ? 'ready' : 'no-route'
+})
 
 function defaultProxyConfig(): ProxyConfig {
   return { enabled: true, transport_mode: 'forward', category_id: 'dockerhub', route_max_age_minutes: 120, failure_cooldown_seconds: 30, max_concurrent: 64, max_range_mb: 256, max_manifest_mb: 8 }
@@ -122,7 +129,7 @@ defineExpose({ refresh })
     <section class="panel settings-card proxy-settings-card">
       <div class="settings-card-heading">
         <div><p class="eyebrow">REGISTRY PROXY</p><h2>{{ t.proxySettingsTitle }}</h2></div>
-        <span class="proxy-status-chip" :class="{ ready: proxyData?.status_available && proxyData.status.ready, disabled: proxyData?.status_available && !proxyData.status.enabled }"><i></i>{{ proxyStatusLabel }}</span>
+        <span class="proxy-status-chip" :class="proxyStatusClass"><i></i>{{ proxyStatusLabel }}</span>
       </div>
       <p class="settings-description">{{ t.proxySettingsDescription }}</p>
       <div class="proxy-status-row">

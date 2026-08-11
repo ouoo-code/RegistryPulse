@@ -99,6 +99,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("/api/v1/admin/probes", s.adminProbes)
 	mux.HandleFunc("/api/v1/admin/probes/", s.adminProbes)
 	mux.HandleFunc("/api/v1/admin/settings", s.adminSettings)
+	mux.HandleFunc("/api/v1/admin/proxy/metrics", s.adminProxyMetrics)
 	mux.HandleFunc("/api/v1/admin/proxy", s.adminProxy)
 	mux.HandleFunc("/api/v1/admin/totp", s.adminTOTP)
 	mux.HandleFunc("/api/v1/admin/test-images", s.adminTestImages)

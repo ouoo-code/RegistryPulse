@@ -107,6 +107,107 @@ func TestHandlerFailsOverBeforeWritingHeaders(t *testing.T) {
 	}
 }
 
+func TestHandlerRejectsUnknownLengthManifestOverLimit(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/vnd.oci.image.manifest.v1+json")
+		_, _ = io.WriteString(w, "12345")
+	}))
+	defer upstream.Close()
+
+	manager, err := NewRouteManager(Config{
+		CategoryID:          "dockerhub",
+		StaticUpstreams:     []string{upstream.URL},
+		AllowPrivateTargets: true,
+		MaxManifestBytes:    4,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(NewHandler(manager, nil).Routes())
+	defer server.Close()
+
+	response, err := http.Get(server.URL + "/v2/library/alpine/manifests/latest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want %d", response.StatusCode, http.StatusRequestEntityTooLarge)
+	}
+}
+
+func TestHandlerAddsRequestIDAndMetrics(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "ok")
+	}))
+	defer upstream.Close()
+
+	manager, err := NewRouteManager(Config{CategoryID: "dockerhub", StaticUpstreams: []string{upstream.URL}, AllowPrivateTargets: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(NewHandler(manager, nil).Routes())
+	defer server.Close()
+
+	response, err := http.Get(server.URL + "/v2/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = response.Body.Close()
+	if response.Header.Get("X-RegistryPulse-Request-ID") == "" {
+		t.Fatal("request id header is missing")
+	}
+
+	metrics, err := http.Get(server.URL + "/metrics")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer metrics.Body.Close()
+	data, _ := io.ReadAll(metrics.Body)
+	for _, name := range []string{
+		"registrypulse_proxy_bytes_forwarded_total",
+		"registrypulse_proxy_responses_total{class=\"2xx\"}",
+	} {
+		if !strings.Contains(string(data), name) {
+			t.Fatalf("metrics missing %q: %s", name, data)
+		}
+	}
+}
+
+func TestHandlerAddsRequestIDToRejectedRegistryRequest(t *testing.T) {
+	manager, err := NewRouteManager(Config{CategoryID: "dockerhub", AllowPrivateTargets: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.ApplyRuntimeConfig(RuntimeConfig{
+		Enabled:                false,
+		TransportMode:          TransportModeForward,
+		ListenPort:             10800,
+		CategoryID:             "dockerhub",
+		RouteMaxAgeMinutes:     120,
+		FailureCooldownSeconds: 30,
+		MaxConcurrent:          64,
+		MaxRangeMB:             256,
+		MaxManifestMB:          8,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(NewHandler(manager, nil).Routes())
+	defer server.Close()
+
+	response, err := http.Get(server.URL + "/v2/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", response.StatusCode, http.StatusServiceUnavailable)
+	}
+	if response.Header.Get("X-RegistryPulse-Request-ID") == "" {
+		t.Fatal("request id header is missing on rejected request")
+	}
+}
+
 func TestHandlerRejectsMutationAndStripsAuthorization(t *testing.T) {
 	var authHeader atomic.Value
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

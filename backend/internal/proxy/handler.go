@@ -2,12 +2,15 @@ package proxy
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/tls"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -317,6 +320,8 @@ type Handler struct {
 	stats         proxyStats
 }
 
+type requestIDContextKey struct{}
+
 func NewHandler(manager *RouteManager, redirectHosts []string) *Handler {
 	allowed := make(map[string]struct{}, len(redirectHosts))
 	for _, host := range redirectHosts {
@@ -358,7 +363,18 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("/metrics", h.metrics)
 	mux.HandleFunc("/v2", h.forward)
 	mux.HandleFunc("/v2/", h.forward)
-	return requestSecurity(h.manager, h.logging(mux))
+	return h.requestIdentity(requestSecurity(h.manager, h.logging(mux)))
+}
+
+func (h *Handler) requestIdentity(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v2" || strings.HasPrefix(r.URL.Path, "/v2/") {
+			requestID := newRequestID()
+			w.Header().Set("X-RegistryPulse-Request-ID", requestID)
+			r = r.WithContext(context.WithValue(r.Context(), requestIDContextKey{}, requestID))
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (h *Handler) logging(next http.Handler) http.Handler {
@@ -431,8 +447,27 @@ func (h *Handler) forward(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "registry API path not found")
 		return
 	}
+	requestID, _ := r.Context().Value(requestIDContextKey{}).(string)
+	if requestID == "" {
+		requestID = newRequestID()
+	}
+	started := time.Now()
+	requestKind := registryRequestKind(r.URL.Path)
+	transportMode := h.manager.TransportMode()
+	w.Header().Set("X-RegistryPulse-Request-ID", requestID)
+	h.stats.active.Add(1)
+	defer h.stats.active.Add(-1)
+	h.stats.requests.Add(1)
+	defer func() {
+		h.stats.durationNanos.Add(time.Since(started).Nanoseconds())
+		slog.Debug("registry proxy request completed", "request_id", requestID, "method", r.Method, "path", r.URL.Path, "kind", requestKind, "transport_mode", transportMode, "duration", time.Since(started))
+	}()
+	finish := func(status int, bytes int64) {
+		h.stats.observeResponse(status, bytes)
+	}
 	candidates := h.manager.Candidates()
 	if len(candidates) == 0 {
+		finish(http.StatusServiceUnavailable, 0)
 		writeError(w, http.StatusServiceUnavailable, "NO_UPSTREAM", "no healthy registry upstream is available")
 		return
 	}
@@ -440,7 +475,9 @@ func (h *Handler) forward(w http.ResponseWriter, r *http.Request) {
 	if hasBound {
 		candidates = prioritizeCandidate(candidates, bound)
 	}
+	attempts := 0
 	for i, candidate := range candidates {
+		attempts++
 		upstream, err := url.Parse(candidate.BaseURL)
 		if err != nil {
 			h.manager.MarkFailure(candidate)
@@ -449,6 +486,9 @@ func (h *Handler) forward(w http.ResponseWriter, r *http.Request) {
 		if h.manager.TransportMode() == TransportModeRedirect {
 			h.manager.MarkSuccess(candidate)
 			h.stats.successes.Add(1)
+			h.stats.redirects.Add(1)
+			finish(http.StatusTemporaryRedirect, 0)
+			slog.Debug("registry proxy request redirected", "request_id", requestID, "candidate", candidate.Name, "attempts", attempts)
 			h.redirect(w, r, upstream)
 			return
 		}
@@ -472,6 +512,7 @@ func (h *Handler) forward(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			h.manager.MarkFailure(candidate)
 			h.stats.upstreamFailures.Add(1)
+			slog.Debug("registry proxy upstream request failed", "request_id", requestID, "candidate", candidate.Name, "error", err)
 			continue
 		}
 		if response.StatusCode == http.StatusUnauthorized {
@@ -483,33 +524,94 @@ func (h *Handler) forward(w http.ResponseWriter, r *http.Request) {
 		if forwardAuth {
 			h.auth.rememberToken(r, candidate)
 		}
-		if isManifestPath(r.URL.Path) && response.ContentLength > h.manager.MaxManifestBytes() {
-			_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 1<<20))
-			_ = response.Body.Close()
-			h.manager.MarkFailure(candidate)
-			writeError(w, http.StatusRequestEntityTooLarge, "MANIFEST_TOO_LARGE", "manifest exceeds the configured proxy limit")
-			return
-		}
 		if retryableStatus(response.StatusCode) && i < len(candidates)-1 {
 			_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 1<<20))
 			_ = response.Body.Close()
 			h.manager.MarkFailure(candidate)
 			h.stats.upstreamFailures.Add(1)
+			h.stats.retries.Add(1)
+			slog.Debug("registry proxy failing over", "request_id", requestID, "candidate", candidate.Name, "status", response.StatusCode)
 			continue
 		}
 		h.manager.MarkSuccess(candidate)
+		if isManifestPath(r.URL.Path) && r.Method != http.MethodHead {
+			body, tooLarge, readErr := readBoundedBody(response.Body, h.manager.MaxManifestBytes())
+			_ = response.Body.Close()
+			if readErr != nil {
+				finish(http.StatusBadGateway, 0)
+				writeError(w, http.StatusBadGateway, "UPSTREAM_READ_FAILED", "could not read the registry manifest")
+				return
+			}
+			if tooLarge {
+				finish(http.StatusRequestEntityTooLarge, 0)
+				writeError(w, http.StatusRequestEntityTooLarge, "MANIFEST_TOO_LARGE", "manifest exceeds the configured proxy limit")
+				return
+			}
+			copyResponseHeaders(w.Header(), response.Header)
+			w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+			w.WriteHeader(response.StatusCode)
+			written, writeErr := w.Write(body)
+			finish(response.StatusCode, int64(written))
+			if writeErr != nil {
+				slog.Debug("registry proxy manifest response write failed", "request_id", requestID, "error", writeErr)
+			}
+			if response.StatusCode >= 200 && response.StatusCode < 400 {
+				h.stats.successes.Add(1)
+			}
+			return
+		}
 		copyResponseHeaders(w.Header(), response.Header)
 		w.WriteHeader(response.StatusCode)
+		var forwarded int64
 		if r.Method != http.MethodHead {
-			_, _ = io.Copy(w, response.Body)
+			forwarded, err = io.Copy(w, response.Body)
 		}
 		_ = response.Body.Close()
+		finish(response.StatusCode, forwarded)
+		if err != nil {
+			slog.Debug("registry proxy response stream ended with error", "request_id", requestID, "candidate", candidate.Name, "error", err, "bytes", forwarded)
+		}
 		if response.StatusCode >= 200 && response.StatusCode < 400 {
 			h.stats.successes.Add(1)
 		}
+		slog.Debug("registry proxy request served", "request_id", requestID, "candidate", candidate.Name, "status", response.StatusCode, "attempts", attempts, "bytes", forwarded)
 		return
 	}
+	finish(http.StatusBadGateway, 0)
 	writeError(w, http.StatusBadGateway, "UPSTREAM_UNAVAILABLE", "all registry upstreams failed")
+}
+
+func newRequestID() string {
+	var raw [12]byte
+	if _, err := rand.Read(raw[:]); err == nil {
+		return hex.EncodeToString(raw[:])
+	}
+	return fmt.Sprintf("%x", time.Now().UnixNano())
+}
+
+func registryRequestKind(path string) string {
+	normalized := strings.TrimSuffix(path, "/")
+	switch {
+	case normalized == "/v2":
+		return "api"
+	case strings.Contains(normalized, "/manifests/"):
+		return "manifest"
+	case strings.Contains(normalized, "/blobs/"):
+		return "blob"
+	default:
+		return "other"
+	}
+}
+
+func readBoundedBody(body io.Reader, limit int64) ([]byte, bool, error) {
+	if limit < 1 {
+		return nil, false, errors.New("body limit must be positive")
+	}
+	data, err := io.ReadAll(io.LimitReader(body, limit+1))
+	if err != nil {
+		return nil, false, err
+	}
+	return data, int64(len(data)) > limit, nil
 }
 
 func (h *Handler) redirect(w http.ResponseWriter, r *http.Request, upstream *url.URL) {
@@ -775,7 +877,34 @@ type proxyStats struct {
 	requests         atomic.Int64
 	successes        atomic.Int64
 	upstreamFailures atomic.Int64
+	retries          atomic.Int64
+	redirects        atomic.Int64
+	active           atomic.Int64
+	bytesForwarded   atomic.Int64
 	durationNanos    atomic.Int64
+	status1xx        atomic.Int64
+	status2xx        atomic.Int64
+	status3xx        atomic.Int64
+	status4xx        atomic.Int64
+	status5xx        atomic.Int64
+}
+
+func (s *proxyStats) observeResponse(status int, bytes int64) {
+	if bytes > 0 {
+		s.bytesForwarded.Add(bytes)
+	}
+	switch {
+	case status >= 100 && status < 200:
+		s.status1xx.Add(1)
+	case status >= 200 && status < 300:
+		s.status2xx.Add(1)
+	case status >= 300 && status < 400:
+		s.status3xx.Add(1)
+	case status >= 400 && status < 500:
+		s.status4xx.Add(1)
+	case status >= 500:
+		s.status5xx.Add(1)
+	}
 }
 
 func (s *proxyStats) prometheus() string {
@@ -784,5 +913,5 @@ func (s *proxyStats) prometheus() string {
 	if requests > 0 {
 		average = float64(s.durationNanos.Load()) / float64(requests) / float64(time.Second)
 	}
-	return fmt.Sprintf("# HELP registrypulse_proxy_requests_total Total proxy requests.\n# TYPE registrypulse_proxy_requests_total counter\nregistrypulse_proxy_requests_total %d\n# HELP registrypulse_proxy_success_total Successful proxy responses.\n# TYPE registrypulse_proxy_success_total counter\nregistrypulse_proxy_success_total %d\n# HELP registrypulse_proxy_upstream_failure_total Upstream failures and failovers.\n# TYPE registrypulse_proxy_upstream_failure_total counter\nregistrypulse_proxy_upstream_failure_total %d\n# HELP registrypulse_proxy_request_duration_seconds Average proxy request duration.\nregistrypulse_proxy_request_duration_seconds %.6f\n", requests, s.successes.Load(), s.upstreamFailures.Load(), average)
+	return fmt.Sprintf("# HELP registrypulse_proxy_requests_total Total proxy requests.\n# TYPE registrypulse_proxy_requests_total counter\nregistrypulse_proxy_requests_total %d\n# HELP registrypulse_proxy_success_total Successful proxy responses.\n# TYPE registrypulse_proxy_success_total counter\nregistrypulse_proxy_success_total %d\n# HELP registrypulse_proxy_upstream_failure_total Upstream failures and failovers.\n# TYPE registrypulse_proxy_upstream_failure_total counter\nregistrypulse_proxy_upstream_failure_total %d\n# HELP registrypulse_proxy_retries_total Upstream failover attempts.\n# TYPE registrypulse_proxy_retries_total counter\nregistrypulse_proxy_retries_total %d\n# HELP registrypulse_proxy_redirects_total Redirect responses returned to clients.\n# TYPE registrypulse_proxy_redirects_total counter\nregistrypulse_proxy_redirects_total %d\n# HELP registrypulse_proxy_active_requests Current active proxy requests.\n# TYPE registrypulse_proxy_active_requests gauge\nregistrypulse_proxy_active_requests %d\n# HELP registrypulse_proxy_bytes_forwarded_total Response bytes forwarded to clients.\n# TYPE registrypulse_proxy_bytes_forwarded_total counter\nregistrypulse_proxy_bytes_forwarded_total %d\n# HELP registrypulse_proxy_responses_total Responses by status class.\n# TYPE registrypulse_proxy_responses_total counter\nregistrypulse_proxy_responses_total{class=\"1xx\"} %d\nregistrypulse_proxy_responses_total{class=\"2xx\"} %d\nregistrypulse_proxy_responses_total{class=\"3xx\"} %d\nregistrypulse_proxy_responses_total{class=\"4xx\"} %d\nregistrypulse_proxy_responses_total{class=\"5xx\"} %d\n# HELP registrypulse_proxy_request_duration_seconds Average proxy request duration.\nregistrypulse_proxy_request_duration_seconds %.6f\n", requests, s.successes.Load(), s.upstreamFailures.Load(), s.retries.Load(), s.redirects.Load(), s.active.Load(), s.bytesForwarded.Load(), s.status1xx.Load(), s.status2xx.Load(), s.status3xx.Load(), s.status4xx.Load(), s.status5xx.Load(), average)
 }

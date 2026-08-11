@@ -1,4 +1,4 @@
-import { api, type AdminProxy, type AdminRole, type AdminRoleInput, type AdminSettings, type AdminTask, type AdminUser, type AdminUserInput, type Category, type CategoryInput, type CredentialProfile, type CredentialProfileInput, type History, type NotificationChannel, type NotificationRule, type ProbeNode, type ProbeTestInput, type ProbeTestResult, type ProxyConfig, type Source, type TestImage, type TestImageQuery, type TotpSettings } from './api'
+import { api, type AdminProxy, type AdminRole, type AdminRoleInput, type AdminSettings, type AdminTask, type AdminUser, type AdminUserInput, type Category, type CategoryInput, type CredentialProfile, type CredentialProfileInput, type History, type NotificationChannel, type NotificationRule, type ProbeNode, type ProbeTestInput, type ProbeTestResult, type ProxyConfig, type ProxyMetrics, type Source, type TestImage, type TestImageQuery, type TotpSettings } from './api'
 
 export function adminHeaders(token: string): HeadersInit {
   return { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }
@@ -37,6 +37,7 @@ export const adminApi = {
   },
   settings: (token: string) => adminRequest<AdminSettings>(token, '/admin/settings'),
   proxy: (token: string) => adminRequest<AdminProxy>(token, '/admin/proxy'),
+  proxyMetrics: (token: string) => adminRequest<ProxyMetrics>(token, '/admin/proxy/metrics'),
   updateProxy: (token: string, input: ProxyConfig) => adminRequest<AdminProxy>(token, '/admin/proxy', { method: 'PUT', body: JSON.stringify(input) }),
   totp: (token: string) => adminRequest<TotpSettings>(token, '/admin/totp'),
   createCategory: (token: string, input: CategoryInput) => adminRequest<Category>(token, '/admin/categories', { method: 'POST', body: JSON.stringify(input) }),

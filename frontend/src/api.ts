@@ -109,6 +109,22 @@ export type AdminProxy = {
   status_available: boolean
   control_snapshot_published: boolean
 }
+export type ProxyMetrics = {
+  requests: number
+  successes: number
+  upstream_failures: number
+  retries: number
+  redirects: number
+  active_requests: number
+  bytes_forwarded: number
+  responses_1xx: number
+  responses_2xx: number
+  responses_3xx: number
+  responses_4xx: number
+  responses_5xx: number
+  average_duration_seconds: number
+  collected_at?: string
+}
 export type TotpSettings = { enabled: boolean; configured?: boolean; secret?: string; otpauth_uri?: string }
 export type AggregatePoint = { bucket: string; samples: number; online_samples: number; avg_duration_ms: number }
 export type SourceAggregates = { hourly: AggregatePoint[]; daily: AggregatePoint[] }

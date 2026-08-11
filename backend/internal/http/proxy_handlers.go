@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"io"
 	"net/http"
 	"os"
 	"strconv"
@@ -71,6 +72,44 @@ func (s *Server) adminProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	data["control_snapshot_published"] = true
 	writeData(w, data, nil)
+}
+
+func (s *Server) adminProxyMetrics(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.requirePermission(w, r, "settings.read"); !ok {
+		return
+	}
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "method not allowed")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, envOrDefault("PROXY_METRICS_URL", "http://proxy:10800/metrics"), nil)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "PROXY_METRICS_UNAVAILABLE", "could not create proxy metrics request")
+		return
+	}
+	client := &http.Client{Timeout: 3 * time.Second}
+	response, err := client.Do(request)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "PROXY_METRICS_UNAVAILABLE", "could not read proxy metrics")
+		return
+	}
+	defer response.Body.Close()
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		writeError(w, http.StatusServiceUnavailable, "PROXY_METRICS_UNAVAILABLE", "proxy metrics endpoint is unavailable")
+		return
+	}
+	const maxMetricsBytes = 256 << 10
+	body, err := io.ReadAll(io.LimitReader(response.Body, maxMetricsBytes+1))
+	if err != nil || len(body) > maxMetricsBytes {
+		writeError(w, http.StatusBadGateway, "PROXY_METRICS_INVALID", "proxy metrics response is invalid")
+		return
+	}
+	snapshot := proxy.ParsePrometheusMetrics(body)
+	snapshot.CollectedAt = time.Now().UTC()
+	writeData(w, snapshot, nil)
 }
 
 func proxyAdminData(ctx context.Context, client redis.UniversalClient, config proxy.RuntimeConfig) map[string]any {
