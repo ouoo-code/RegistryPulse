@@ -21,7 +21,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-registry_monitor}
       POSTGRES_USER: ${POSTGRES_USER:-registry_monitor}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
-    volumes: ["postgres-data:/var/lib/postgresql/data"]
+    volumes: ["./data/postgres:/var/lib/postgresql/data"]
     healthcheck: {test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"], interval: 10s, timeout: 5s, retries: 5}
     networks: [backend]
     logging: *default-logging
@@ -29,7 +29,7 @@ services:
     image: ${REDIS_IMAGE:-redis:7.4-alpine}
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
-    volumes: ["redis-data:/data"]
+    volumes: ["./data/redis:/data"]
     healthcheck: {test: ["CMD", "redis-cli", "ping"], interval: 10s, timeout: 5s, retries: 5}
     networks: [backend]
     logging: *default-logging
@@ -113,8 +113,3 @@ services:
 networks:
   frontend: {}
   backend: {}
-volumes:
-  postgres-data:
-    name: registrypulse_postgres-data
-  redis-data:
-    name: registrypulse_redis-data

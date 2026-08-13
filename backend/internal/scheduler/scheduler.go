@@ -73,6 +73,7 @@ type Config struct {
 	MaxConcurrent, ResultRetries, ProbeRetries                               int
 	ProbeTimeout, Interval, ResultTimeout, RunLockTTL, SourceLockTTL, Jitter time.Duration
 	IntervalProvider, RetryIntervalProvider                                  func(context.Context) time.Duration
+	EnabledProvider                                                          func(context.Context) bool
 	RunLockKey, SourceLockPrefix                                             string
 	Locker                                                                   Locker
 	CredentialProvider                                                       CredentialProvider
@@ -145,7 +146,17 @@ func New(cfg Config, sources SourceProvider, recorder ResultRecorder, machine *i
 func (r *Runner) Metrics() *metrics.Registry { return r.metrics }
 func (r *Runner) Machine() *incident.Machine { return r.machine }
 
+func (r *Runner) enabled(ctx context.Context) bool {
+	if r.cfg.EnabledProvider == nil {
+		return true
+	}
+	return r.cfg.EnabledProvider(ctx)
+}
+
 func (r *Runner) RunOnce(ctx context.Context) error {
+	if !r.enabled(ctx) {
+		return nil
+	}
 	r.metrics.LockAttempt()
 	runLease, ok, err := r.cfg.Locker.TryAcquire(ctx, r.cfg.RunLockKey, r.cfg.RunLockTTL)
 	if err != nil {
@@ -387,10 +398,22 @@ func setFirst(mu *sync.Mutex, first *error, err error) {
 }
 
 func (r *Runner) Run(ctx context.Context) error {
-	if err := r.RunOnce(ctx); err != nil && !errors.Is(err, context.Canceled) {
-		return err
-	}
 	for {
+		if !r.enabled(ctx) {
+			timer := time.NewTimer(5 * time.Second)
+			select {
+			case <-ctx.Done():
+				if !timer.Stop() {
+					<-timer.C
+				}
+				return ctx.Err()
+			case <-timer.C:
+				continue
+			}
+		}
+		if err := r.RunOnce(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			return err
+		}
 		interval := r.cfg.Interval
 		if r.cfg.IntervalProvider != nil {
 			if configured := r.cfg.IntervalProvider(ctx); configured > 0 {

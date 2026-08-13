@@ -14,6 +14,7 @@ const categories = ref<Category[]>([])
 const settingEntries = ref<Array<{ key: string; value: string }>>([])
 const probeIntervalMinutes = ref(30)
 const probeRetryIntervalMinutes = ref(3)
+const probeServiceEnabled = ref(true)
 const proxyData = ref<AdminProxy | null>(null)
 const proxySaving = ref(false)
 const proxyRefreshing = ref(false)
@@ -46,6 +47,12 @@ function parseSettingValue(value: unknown) {
   if (typeof value === 'object' && value !== null && 'value' in value) return (value as { value: unknown }).value
   return value
 }
+function parseBooleanSetting(value: unknown, fallback = true) {
+  const parsed = parseSettingValue(value)
+  if (typeof parsed === 'boolean') return parsed
+  if (typeof parsed === 'string' && /^(true|false)$/i.test(parsed)) return parsed.toLowerCase() === 'true'
+  return fallback
+}
 
 async function refresh() {
   try {
@@ -56,8 +63,9 @@ async function refresh() {
     proxyForm.value = { ...defaultProxyConfig(), ...currentProxy.config }
     probeIntervalMinutes.value = Number(parseSettingValue(systemSettings.probe_interval_minutes)) || 30
     probeRetryIntervalMinutes.value = Number(parseSettingValue(systemSettings.probe_retry_interval_minutes)) || 3
+    probeServiceEnabled.value = parseBooleanSetting(systemSettings.probe_service_enabled)
     settingEntries.value = Object.entries(systemSettings)
-      .filter(([key]) => !['probe_interval_minutes', 'probe_retry_interval_minutes'].includes(key))
+      .filter(([key]) => !['probe_interval_minutes', 'probe_retry_interval_minutes', 'probe_service_enabled'].includes(key))
       .map(([key, value]) => ({ key, value: typeof value === 'string' ? value : JSON.stringify(value) }))
   } catch (error) { fail(error) }
 }
@@ -76,6 +84,7 @@ async function saveSettings() {
     const payload: AdminSettings = {
       probe_interval_minutes: Math.max(1, Math.min(1440, Math.round(probeIntervalMinutes.value))),
       probe_retry_interval_minutes: Math.max(1, Math.min(1440, Math.round(probeRetryIntervalMinutes.value))),
+      probe_service_enabled: probeServiceEnabled.value,
     }
     for (const entry of settingEntries.value) {
       try { payload[entry.key] = JSON.parse(entry.value) } catch { payload[entry.key] = entry.value }
@@ -120,6 +129,11 @@ defineExpose({ refresh })
           <h3>{{ locale === 'zh' ? '启用公共查询 API 接口' : 'Enable public query API' }}</h3>
           <p>{{ locale === 'zh' ? '允许公开页面查询镜像源状态。' : 'Allow public pages to query registry status.' }}</p>
           <label class="settings-toggle"><input type="checkbox" :checked="publicAPIEntry.value === 'true'" @change="setBooleanSetting(publicAPIEntry, $event)"><span>{{ publicAPIEntry.value === 'true' ? t.enabled : t.disabled }}</span></label>
+        </div>
+        <div class="settings-option-card settings-probe-service-option">
+          <h3>{{ t.probeService }}</h3>
+          <p>{{ t.probeServiceHint }}</p>
+          <label class="settings-toggle"><input v-model="probeServiceEnabled" type="checkbox"><span>{{ probeServiceEnabled ? t.enabled : t.disabled }}</span></label>
         </div>
       </div>
       <div v-if="otherSettingEntries.length" class="settings-other-grid"><FormField v-for="entry in otherSettingEntries" :key="entry.key" :label="entry.key"><input v-model="entry.value"></FormField></div>

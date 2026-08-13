@@ -72,6 +72,23 @@ func TestDueKindSeparatesNormalRoundFromRetry(t *testing.T) {
 	}
 }
 
+func TestRunOnceSkipsWhenProbeServiceIsDisabled(t *testing.T) {
+	recorder := &recordingRecorder{}
+	runner := New(Config{
+		EnabledProvider: func(context.Context) bool { return false },
+	}, func(context.Context) ([]domain.Source, error) {
+		t.Fatal("source provider should not be called while the probe service is disabled")
+		return nil, nil
+	}, recorder, incident.New(incident.Config{}), nil)
+
+	if err := runner.RunOnce(context.Background()); err != nil {
+		t.Fatalf("RunOnce returned an error: %v", err)
+	}
+	if got := recorder.Count(); got != 0 {
+		t.Fatalf("disabled probe service recorded %d results, want 0", got)
+	}
+}
+
 type recordingRecorder struct {
 	mu          sync.Mutex
 	count       int

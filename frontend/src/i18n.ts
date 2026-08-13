@@ -7,8 +7,8 @@ const saved = localStorage.getItem('locale') as Locale | null
 const locale = ref<Locale>(saved === 'en' ? 'en' : 'zh')
 
 const retryIntervalLabels = {
-  zh: { probeRetryInterval: '异常源重试间隔（分钟）', probeRetryIntervalHint: '错误、未知、离线或降级的镜像源按此间隔重试。' },
-  en: { probeRetryInterval: 'Unhealthy retry interval (minutes)', probeRetryIntervalHint: 'Error, unknown, offline, or degraded sources are retried at this interval.' },
+  zh: { probeRetryInterval: '异常源重试间隔（分钟）', probeRetryIntervalHint: '错误、未知、离线或降级的镜像源按此间隔重试。', probeService: '探测服务', probeServiceHint: '关闭后暂停后台自动探测；前台、API 和管理页面仍可用，重新启用后自动恢复。' },
+  en: { probeRetryInterval: 'Unhealthy retry interval (minutes)', probeRetryIntervalHint: 'Error, unknown, offline, or degraded sources are retried at this interval.', probeService: 'Probe service', probeServiceHint: 'Pause automatic probing while keeping the frontend, API, and admin pages available.' },
 } as const
 
 const proxyTransportLabels = {

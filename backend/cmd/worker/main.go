@@ -73,6 +73,15 @@ func dbSettingDuration(db *sql.DB, key string, fallback time.Duration) time.Dura
 	}
 	return fallback
 }
+func dbSettingBool(db *sql.DB, key string, fallback bool) bool {
+	var raw string
+	if err := db.QueryRow(`SELECT COALESCE(value->>'value',value#>>'{}') FROM system_settings WHERE key=$1`, key).Scan(&raw); err == nil {
+		if value, err := strconv.ParseBool(raw); err == nil {
+			return value
+		}
+	}
+	return fallback
+}
 func retentionPolicyFromEnv() database.RetentionPolicy {
 	days := func(name string, fallback int) time.Duration {
 		value := envInt(name, fallback)
@@ -203,11 +212,18 @@ func main() {
 			return dbSettingDuration(dbHandle, "probe_retry_interval_minutes", retryInterval)
 		}
 	}
+	enabledProvider := func(_ context.Context) bool { return true }
+	if db, ok := store.(interface{ DBHandle() *sql.DB }); ok && db.DBHandle() != nil {
+		dbHandle := db.DBHandle()
+		enabledProvider = func(_ context.Context) bool {
+			return dbSettingBool(dbHandle, "probe_service_enabled", true)
+		}
+	}
 	machine := incident.New(incident.Config{FailureThreshold: failureThreshold, RecoveryThreshold: recoveryThreshold, SlowThreshold: slowThreshold})
 	for _, source := range store.Sources() {
 		machine.Seed(source.ID, source.Status, source.Maintenance)
 	}
-	runner := scheduler.New(scheduler.Config{Interval: interval, IntervalProvider: intervalProvider, RetryIntervalProvider: retryIntervalProvider, Jitter: jitter, MaxConcurrent: maxConcurrent, ProbeTimeout: 15 * time.Second, ResultTimeout: time.Duration(envInt("RESULT_TIMEOUT_SECONDS", 10)) * time.Second, ResultRetries: envInt("RESULT_RETRIES", 2), ProbeRetries: envInt("PROBE_RETRIES", 2), Locker: locker, CredentialProvider: credentialProvider}, func(ctx context.Context) ([]domain.Source, error) { return store.Sources(), nil }, recorder, machine, nil)
+	runner := scheduler.New(scheduler.Config{Interval: interval, IntervalProvider: intervalProvider, RetryIntervalProvider: retryIntervalProvider, EnabledProvider: enabledProvider, Jitter: jitter, MaxConcurrent: maxConcurrent, ProbeTimeout: 15 * time.Second, ResultTimeout: time.Duration(envInt("RESULT_TIMEOUT_SECONDS", 10)) * time.Second, ResultRetries: envInt("RESULT_RETRIES", 2), ProbeRetries: envInt("PROBE_RETRIES", 2), Locker: locker, CredentialProvider: credentialProvider}, func(ctx context.Context) ([]domain.Source, error) { return store.Sources(), nil }, recorder, machine, nil)
 	slog.Info("worker started", "normal_interval", interval, "retry_interval", retryInterval, "max_concurrent", maxConcurrent)
 	if err := runner.Run(ctx); err != nil && ctx.Err() == nil {
 		slog.Error("worker stopped with error", "error", err)
