@@ -20,7 +20,7 @@
 - 管理后台支持镜像源、分类、任务、测试镜像、通知、通知规则和系统设置
 - 支持 Gotify、Webhook、SMTP 通知
 - PostgreSQL 保存业务数据，Redis 用于缓存、调度和任务锁
-- Docker Compose 一键部署，数据使用独立持久化卷
+- Docker Compose 一键部署，数据持久化到项目目录下的 `./data`
 - 提供健康检查、Prometheus 指标、备份和恢复脚本
 
 ## 页面
@@ -105,7 +105,7 @@ docker compose up -d
 docker compose ps
 ~~~
 
-本版本按首次安装处理：API 第一次启动时会创建完整数据库结构并写入默认分类、测试镜像、系统设置和内置镜像源。项目不包含旧版本数据库迁移、回填、升级或回滚步骤；容器重启时会自动跳过已经完成的初始化。正式使用前请保留 PostgreSQL 持久化卷，并按需执行 `make backup`。如果重新部署时需要清空环境，应先停止服务并明确删除本项目的 PostgreSQL/Redis 数据卷；这会永久删除数据。
+本版本按首次安装处理：API 第一次启动时会创建完整数据库结构并写入默认分类、测试镜像、系统设置和内置镜像源。项目不包含旧版本数据库迁移、回填、升级或回滚步骤；容器重启时会自动跳过已经完成的初始化。正式使用前请保留项目目录下的 `./data/postgres` 和 `./data/redis`，并按需执行 `make backup`。如果重新部署时需要清空环境，必须在停止服务后明确删除这两个目录；这会永久删除数据。
 
 应用发布版本存储在项目根目录的 `VERSION` 文件中。Compose 变量
 `REGISTRYPULSE_VERSION=latest` 用于选择 Docker Hub 镜像通道；它不是应用界面显示的版本号。
@@ -144,16 +144,18 @@ Compose 项目技术名为 **registrypulse**。
 | postgres | 保存镜像源、任务、历史、故障和通知数据 |
 | redis | 缓存、任务锁和调度协调 |
 
-持久化卷：
+持久化目录：
 
-- registrypulse_postgres-data
-- registrypulse_redis-data
+- `./data/postgres`：PostgreSQL 数据库文件
+- `./data/redis`：Redis AOF 持久化文件
 
-不要随意使用以下命令，否则会删除数据库卷：
+Compose 使用宿主机目录挂载，不使用 Docker 命名卷。普通重启或更新镜像不会删除 `./data` 中的数据。不要在未确认数据备份的情况下手动删除以下目录：
 
 ~~~bash
-docker compose down -v
+rm -rf ./data/postgres ./data/redis
 ~~~
+
+`docker compose down -v` 不会删除当前这两个宿主机绑定目录，但如果以后改回 Docker 命名卷，该命令可能会删除对应的命名卷，因此生产环境仍不建议随意使用。
 
 ### Registry Proxy 实时转发
 
@@ -377,6 +379,8 @@ RegistryPulse/
 ├── frontend/src/            Vue 页面、组件、API 和国际化
 ├── deploy/                  Nginx 与部署脚本
 ├── tests/                   API、Compose、前端和 E2E 测试
+├── data/postgres/           PostgreSQL 持久化数据（已被 Git 忽略）
+├── data/redis/              Redis 持久化数据（已被 Git 忽略）
 ├── .env.example             环境变量模板
 ├── docker-compose.yml       Docker Compose 定义
 ├── Makefile                 常用开发命令

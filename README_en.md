@@ -19,7 +19,7 @@ The project performs real Registry HTTP probes to record source availability, re
 - Administration console for sources, categories, tasks, test images, notifications, notification rules, and system settings
 - Supports Gotify, Webhook, and SMTP notifications
 - Uses PostgreSQL for business data and Redis for caching, scheduling, and task locks
-- One-command Docker Compose deployment with independent persistent volumes
+- One-command Docker Compose deployment with data persisted under `./data`
 - Provides health checks, Prometheus metrics, backup, and restore scripts
 
 ## Pages
@@ -110,7 +110,7 @@ docker compose up -d
 docker compose ps
 ~~~
 
-This release is designed as a fresh installation. On the first API start, the application creates the complete database schema and inserts the default categories, test images, system settings, and built-in source catalog. It does not include legacy migrations, backfills, upgrade, or rollback steps. Restarts skip the completed initialization; keep the PostgreSQL volume and use `make backup` after the service starts. If you intentionally want a blank installation, stop the stack and explicitly remove only this project’s PostgreSQL/Redis volumes; that permanently deletes data.
+This release is designed as a fresh installation. On the first API start, the application creates the complete database schema and inserts the default categories, test images, system settings, and built-in source catalog. It does not include legacy migrations, backfills, upgrade, or rollback steps. Restarts skip the completed initialization; keep `./data/postgres` and `./data/redis`, and use `make backup` after the service starts. If you intentionally want a blank installation, stop the stack and explicitly remove these two directories; that permanently deletes data.
 
 The application release version is stored in the root `VERSION` file. The Compose variable `REGISTRYPULSE_VERSION=latest` selects the Docker Hub image channel; it is not the version displayed by the application.
 
@@ -148,16 +148,18 @@ The Compose project name is **registrypulse**.
 | postgres | Stores sources, tasks, history, incidents, and notification data |
 | redis | Caching, task locks, and scheduling coordination |
 
-Persistent volumes:
+Persistent directories:
 
-- registrypulse_postgres-data
-- registrypulse_redis-data
+- `./data/postgres`: PostgreSQL database files
+- `./data/redis`: Redis AOF persistence files
 
-Do not run the following command casually, because it deletes the database volumes:
+Compose uses host-directory bind mounts rather than Docker named volumes. Normal restarts and image updates do not delete data under `./data`. Do not manually remove these directories without a verified backup:
 
 ~~~bash
-docker compose down -v
+rm -rf ./data/postgres ./data/redis
 ~~~
+
+`docker compose down -v` does not delete the current host bind-mount directories. However, if the project is changed back to Docker named volumes later, that command may delete the corresponding named volumes, so it should still not be used casually in production.
 
 ### Registry Proxy real-time forwarding
 
@@ -394,6 +396,8 @@ RegistryPulse/
 ├── frontend/src/            Vue pages, components, API, and internationalization
 ├── deploy/                  Nginx and deployment scripts
 ├── tests/                   API, Compose, frontend, and E2E tests
+├── data/postgres/           PostgreSQL persistent data (ignored by Git)
+├── data/redis/              Redis persistent data (ignored by Git)
 ├── .env.example             Environment variable template
 ├── docker-compose.yml       Docker Compose definition
 ├── Makefile                 Common development commands
