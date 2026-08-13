@@ -54,9 +54,11 @@ flowchart LR
 
 In single-host mode, the API, Worker, frontend, Nginx, PostgreSQL, Redis, and the independent registry-proxy run in the same Compose project. Registration, heartbeat, task polling, and result reporting APIs for probe agents are reserved for future multi-region deployments.
 
-![Frontend](rp-1.png)
-
-![Administration console](rp-2.png)
+| Frontend | Administration | Administration |
+| :---: | :---: | :---: |
+| ![Frontend](rp-1.png) | ![Administration](rp-2.png) | ![Administration](rp-3.png) |
+| Administration | Administration | Administration |
+| ![Administration](rp-4.png) | ![Administration](rp-5.png) | ![Administration](rp-6.png) |
 
 ## Quick Start
 
