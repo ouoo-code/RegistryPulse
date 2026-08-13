@@ -10,6 +10,8 @@ frontend/dist/
 tests/e2e/playwright-report/
 tests/e2e/test-results/
 backups/
+data/postgres/
+data/redis/
 *.log
 .DS_Store
 
