@@ -20,8 +20,8 @@ const proxySaving = ref(false)
 const proxyRefreshing = ref(false)
 const proxyForm = ref<ProxyConfig>(defaultProxyConfig())
 
-const publicAPIEntry = computed(() => settingEntries.value.find((entry) => entry.key === 'public_api_enabled'))
-const otherSettingEntries = computed(() => settingEntries.value.filter((entry) => entry.key !== 'public_api_enabled'))
+const publicAPIEnabled = ref(false)
+const otherSettingEntries = computed(() => settingEntries.value)
 const proxyStatusLabel = computed(() => {
   const data = proxyData.value
   if (!data?.status_available) return t.value.proxyStatusUnavailable
@@ -63,9 +63,10 @@ async function refresh() {
     proxyForm.value = { ...defaultProxyConfig(), ...currentProxy.config }
     probeIntervalMinutes.value = Number(parseSettingValue(systemSettings.probe_interval_minutes)) || 30
     probeRetryIntervalMinutes.value = Number(parseSettingValue(systemSettings.probe_retry_interval_minutes)) || 3
+    publicAPIEnabled.value = parseBooleanSetting(systemSettings.public_api_enabled, false)
     probeServiceEnabled.value = parseBooleanSetting(systemSettings.probe_service_enabled)
     settingEntries.value = Object.entries(systemSettings)
-      .filter(([key]) => !['probe_interval_minutes', 'probe_retry_interval_minutes', 'probe_service_enabled'].includes(key))
+      .filter(([key]) => !['probe_interval_minutes', 'probe_retry_interval_minutes', 'probe_service_enabled', 'public_api_enabled'].includes(key))
       .map(([key, value]) => ({ key, value: typeof value === 'string' ? value : JSON.stringify(value) }))
   } catch (error) { fail(error) }
 }
@@ -84,6 +85,7 @@ async function saveSettings() {
     const payload: AdminSettings = {
       probe_interval_minutes: Math.max(1, Math.min(1440, Math.round(probeIntervalMinutes.value))),
       probe_retry_interval_minutes: Math.max(1, Math.min(1440, Math.round(probeRetryIntervalMinutes.value))),
+      public_api_enabled: publicAPIEnabled.value,
       probe_service_enabled: probeServiceEnabled.value,
     }
     for (const entry of settingEntries.value) {
@@ -125,10 +127,10 @@ defineExpose({ refresh })
           <p>{{ t.probeRetryIntervalHint }}</p>
           <input v-model.number="probeRetryIntervalMinutes" type="number" min="1" max="1440">
         </div>
-        <div v-if="publicAPIEntry" class="settings-option-card settings-public-option">
+        <div class="settings-option-card settings-public-option">
           <h3>{{ locale === 'zh' ? '启用公共查询 API 接口' : 'Enable public query API' }}</h3>
           <p>{{ locale === 'zh' ? '允许公开页面查询镜像源状态。' : 'Allow public pages to query registry status.' }}</p>
-          <label class="settings-toggle"><input type="checkbox" :checked="publicAPIEntry.value === 'true'" @change="setBooleanSetting(publicAPIEntry, $event)"><span>{{ publicAPIEntry.value === 'true' ? t.enabled : t.disabled }}</span></label>
+          <label class="settings-toggle"><input v-model="publicAPIEnabled" type="checkbox"><span>{{ publicAPIEnabled ? t.enabled : t.disabled }}</span></label>
         </div>
         <div class="settings-option-card settings-probe-service-option">
           <h3>{{ t.probeService }}</h3>
